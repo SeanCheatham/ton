@@ -725,6 +725,7 @@ class UdpSocketFdImpl {
       helpers[i].to_native(messages[i], headers[i].msg_hdr);
       headers[i].msg_len = 0;
     }
+    struct std::array<struct mmsghdr, 16> headers_copy = headers;
 
     auto native_fd = get_native_fd().socket();
     auto sendmmsg_res =
@@ -733,6 +734,25 @@ class UdpSocketFdImpl {
     if (sendmmsg_res >= 0) {
       cnt = sendmmsg_res;
       return Status::OK();
+    }
+    if (sendmmsg_errno == EINVAL) {
+      FLOG(ERROR) {
+        sb << "------------------------------------------\n";
+        sb << "SENDMMSG ERRROR EINVAL:\n";
+        sb << "native_fd = " << native_fd << "\n";
+        sb << "to_send = " << to_send << "\n";
+        for (size_t i = 0; i < to_send; ++i) {
+          auto &h = headers_copy[i];
+          sb << "msg #" << i << ":";
+          sb << " msg_len=" << h.msg_len;
+          sb << " msg_namelen=" << h.msg_hdr.msg_namelen;
+          sb << " msg_iovlen=" << h.msg_hdr.msg_iovlen;
+          sb << " msg_controllen=" << h.msg_hdr.msg_controllen;
+          sb << " msg_flags=" << h.msg_hdr.msg_flags;
+          sb << "\n";
+        }
+        sb << "------------------------------------------\n";
+      };
     }
 
     bool is_sent = false;
