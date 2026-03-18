@@ -739,17 +739,44 @@ class UdpSocketFdImpl {
       FLOG(ERROR) {
         sb << "------------------------------------------\n";
         sb << "SENDMMSG ERRROR EINVAL:\n";
+        for (size_t i = 0; i < to_send; ++i) {
+          auto& m = messages[i];
+          sb << "msg #" << i << ":";
+          sb << " ip=";
+          if (m.to) {
+            sb << m.to->get_ip_str() << ":" << m.to->get_port();
+          } else {
+            sb << "null";
+          }
+          sb << " data_size=" << m.data.size();
+          sb << " gso_size" << m.gso_size;
+          sb << "\n";
+        }
+        sb << "sendmmsg params:\n";
         sb << "native_fd = " << native_fd << "\n";
         sb << "to_send = " << to_send << "\n";
         for (size_t i = 0; i < to_send; ++i) {
           auto &h = headers_copy[i];
-          sb << "msg #" << i << ":";
+          sb << "header #" << i << ":";
           sb << " msg_len=" << h.msg_len;
           sb << " msg_namelen=" << h.msg_hdr.msg_namelen;
           sb << " msg_iovlen=" << h.msg_hdr.msg_iovlen;
           sb << " msg_controllen=" << h.msg_hdr.msg_controllen;
           sb << " msg_flags=" << h.msg_hdr.msg_flags;
           sb << "\n";
+          for (size_t j = 0; j < h.msg_hdr.msg_iovlen; ++j) {
+            auto &iov = h.msg_hdr.msg_iov[j];
+            sb << "  iov #" << j << ":";
+            sb << " iov_len=" << iov.iov_len;
+            sb << "\n";
+          }
+          if (h.msg_hdr.msg_namelen > 0) {
+            sb << "  msg_name = " << buffer_to_hex(Slice((char *)h.msg_hdr.msg_name, h.msg_hdr.msg_namelen)) << "\n";
+          }
+          if (h.msg_hdr.msg_controllen) {
+            sb << "  msg_control = " << buffer_to_hex(Slice((char *)h.msg_hdr.msg_control, h.msg_hdr.msg_controllen))
+               << "\n";
+          }
         }
         sb << "------------------------------------------\n";
       };
