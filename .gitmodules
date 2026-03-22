@@ -55,3 +55,6 @@
 	path = third-party/zlib
 	url = https://github.com/madler/zlib.git
 	ignore = all
+[submodule "third-party/antithesis-sdk-cpp"]
+	path = third-party/antithesis-sdk-cpp
+	url = https://github.com/antithesishq/antithesis-sdk-cpp.git

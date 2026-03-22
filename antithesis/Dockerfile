@@ -1,0 +1,89 @@
+# Antithesis build of TON validator-engine
+# Based on the project's root Dockerfile with Antithesis SDK assertions.
+#
+# NOTE: Submodules must be initialized on the host before building.
+# Run: git submodule update --init --recursive
+#
+# Coverage instrumentation (-fsanitize-coverage=trace-pc-guard) is not yet
+# enabled due to linker compatibility issues with the project's --gc-sections
+# and --exclude-libs flags. The SDK assertions still fire without coverage
+# instrumentation; coverage can be added once the linker flags are resolved.
+
+FROM ubuntu:22.04 AS builder
+ARG DEBIAN_FRONTEND=noninteractive
+RUN apt-get update && \
+        rm /var/lib/dpkg/info/libc-bin.* && \
+        apt-get clean && \
+        apt-get update && \
+        apt install libc-bin && \
+        apt-get install -y build-essential cmake clang gperf wget git \
+        ninja-build pkg-config autoconf automake libtool \
+        libjemalloc-dev lsb-release software-properties-common gnupg
+
+RUN wget https://apt.llvm.org/llvm.sh && \
+    chmod +x llvm.sh && \
+    ./llvm.sh 21 all && \
+    rm -rf /var/lib/apt/lists/*
+
+ENV CC=/usr/bin/clang-21
+ENV CXX=/usr/bin/clang++-21
+ENV CCACHE_DISABLE=1
+
+WORKDIR /
+RUN mkdir ton
+WORKDIR /ton
+
+COPY ./ ./
+
+RUN mkdir build && \
+        cd build && \
+        cmake -GNinja -DCMAKE_BUILD_TYPE=Release -DPORTABLE=1 -DTON_ARCH= -DTON_USE_JEMALLOC=ON .. && \
+        ninja validator-engine generate-random-id
+
+# ---------------------------------------------------------------------------
+# Runtime image: validator-engine (SUT)
+# ---------------------------------------------------------------------------
+FROM ubuntu:22.04 AS validator
+ARG DEBIAN_FRONTEND=noninteractive
+RUN apt-get update && \
+    apt-get install -y openssl libatomic1 libsodium-dev libmicrohttpd-dev liblz4-dev libjemalloc-dev \
+                       wget curl net-tools netcat jq && \
+    rm -rf /var/lib/apt/lists/*
+
+RUN mkdir -p /var/ton-work/db /var/ton-work/scripts /symbols
+
+COPY --from=builder /ton/build/validator-engine/validator-engine /usr/local/bin/
+COPY --from=builder /ton/build/utils/generate-random-id /usr/local/bin/
+
+# Expose debug symbols for Antithesis symbolization
+RUN ln -s /usr/local/bin/validator-engine /symbols/validator-engine
+
+COPY antithesis/setup-complete.sh /usr/local/bin/setup-complete.sh
+RUN chmod +x /usr/local/bin/setup-complete.sh
+
+COPY antithesis/entrypoint-validator.sh /usr/local/bin/entrypoint-validator.sh
+RUN chmod +x /usr/local/bin/entrypoint-validator.sh
+
+WORKDIR /var/ton-work/db
+ENTRYPOINT ["/usr/local/bin/entrypoint-validator.sh"]
+
+# ---------------------------------------------------------------------------
+# Workload image: test driver
+# ---------------------------------------------------------------------------
+FROM debian:bookworm-slim AS workload
+ARG DEBIAN_FRONTEND=noninteractive
+RUN apt-get update && \
+    apt-get install -y curl netcat-openbsd jq bash && \
+    rm -rf /var/lib/apt/lists/*
+
+RUN mkdir -p /opt/antithesis/test/v1/ton
+
+COPY antithesis/test/v1/ton/ /opt/antithesis/test/v1/ton/
+
+COPY antithesis/setup-complete.sh /usr/local/bin/setup-complete.sh
+RUN chmod +x /usr/local/bin/setup-complete.sh
+
+COPY antithesis/entrypoint-workload.sh /usr/local/bin/entrypoint-workload.sh
+RUN chmod +x /usr/local/bin/entrypoint-workload.sh
+
+ENTRYPOINT ["/usr/local/bin/entrypoint-workload.sh"]

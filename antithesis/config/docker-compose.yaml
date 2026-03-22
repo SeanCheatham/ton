@@ -1,0 +1,38 @@
+services:
+  validator:
+    container_name: validator
+    hostname: validator
+    platform: linux/amd64
+    build:
+      context: ../..
+      dockerfile: antithesis/Dockerfile
+      target: validator
+    image: validator:latest
+    environment:
+      - VALIDATOR_PORT=30001
+      - CONSOLE_PORT=30002
+      - LITE_PORT=30003
+      - THREADS=2
+      - VERBOSITY=3
+    volumes:
+      - shared:/shared
+
+  workload:
+    container_name: workload
+    hostname: workload
+    platform: linux/amd64
+    build:
+      context: ../..
+      dockerfile: antithesis/Dockerfile
+      target: workload
+    image: workload:latest
+    environment:
+      - VALIDATOR_HOST=validator
+      - VALIDATOR_PORT=30001
+    depends_on:
+      - validator
+    volumes:
+      - shared:/shared
+
+volumes:
+  shared:
