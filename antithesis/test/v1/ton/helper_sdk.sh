@@ -62,3 +62,22 @@ sdk_always() {
   _SDK_SEEN["$key"]=1
   _sdk_emit_assert true true "always" "Always" "$message" "$condition" "$details"
 }
+
+# Catalog (declare) a Sometimes assertion at startup
+sdk_catalog_sometimes() {
+  local message="$1"
+  _sdk_emit_assert false true "sometimes" "Sometimes" "$message" false
+}
+
+# Evaluate a Sometimes assertion at runtime.
+# Usage: sdk_sometimes <condition_bool> <message> [details_json]
+#   condition_bool: "true" or "false"
+sdk_sometimes() {
+  local condition="$1" message="$2" details="${3:-null}"
+  local key="${message}:${condition}"
+  if [[ -n "${_SDK_SEEN[$key]:-}" ]]; then
+    return 0
+  fi
+  _SDK_SEEN["$key"]=1
+  _sdk_emit_assert true true "sometimes" "Sometimes" "$message" "$condition" "$details"
+}
