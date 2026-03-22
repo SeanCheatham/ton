@@ -29,6 +29,8 @@ services:
     environment:
       - VALIDATOR_HOST=validator
       - VALIDATOR_PORT=30001
+      - CONSOLE_PORT=30002
+      - LITE_PORT=30003
     depends_on:
       - validator
     volumes:

@@ -12,6 +12,20 @@
 | **Antithesis Angle** | Confirms the SUT boots successfully in the Antithesis environment |
 | **Why It Matters** | Bootstrap verification — proves SDK integration works and the binary runs |
 
+## Implemented Properties
+
+### 2. Validator Subsystem Consistency: All Ports Reachable Together
+
+| | |
+|---|---|
+| **Type** | Safety (Always) |
+| **Property** | When the validator's main UDP port (30001) is reachable, the console TCP port (30002) and liteserver TCP port (30003) must also be reachable |
+| **Invariant** | `ALWAYS(console_ok && lite_ok, "Validator subsystem consistency: all ports reachable together")` — evaluated only when UDP:30001 is up |
+| **Antithesis Angle** | Fault injection may crash internal subsystems (ADNL, console, lite-server) while the main process stays alive |
+| **Why It Matters** | Detects partial failures where the main process appears healthy but critical subsystems are down — a dangerous state for operators and clients |
+| **Workload** | `parallel_driver_subsystem_consistency.sh` — runs repeatedly during fault injection |
+| **Status** | ✅ Implemented |
+
 ## Future Properties (for antithesis-workload)
 
 ### 2. Validator Engine Does Not Crash
