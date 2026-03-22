@@ -48,6 +48,7 @@ done
 source /opt/antithesis/test/v1/ton/helper_sdk.sh
 sdk_catalog_always "Validator subsystem consistency: all ports reachable together"
 sdk_catalog_sometimes "Validator recovers fully after fault injection"
+sdk_catalog_sometimes "Validator recovers mid-test after going down"
 echo "Assertion catalog emitted."
 
 # Signal that setup is complete
