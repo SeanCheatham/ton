@@ -59,5 +59,7 @@ else
     sdk_always false "Validator subsystem consistency: all ports reachable together" \
         "$(jq -cn --arg console "$console_ok" --arg lite "$lite_ok" \
             '{console_port_ok: ($console == "true"), lite_port_ok: ($lite == "true")}')"
-    exit 1
+    # Exit 0 so the driver keeps running — the SDK assertion records the violation.
+    # A non-zero exit would stop this driver from being re-scheduled by Test Composer.
+    exit 0
 fi

@@ -2,7 +2,9 @@
 set -euo pipefail
 
 # Entrypoint for the TON validator-engine in the Antithesis environment.
-# Starts validator-engine with a minimal local configuration.
+# Starts validator-engine with a minimal local configuration that includes
+# liteserver (TCP) and control/console (TCP) interfaces in addition to the
+# main UDP P2P port.
 
 DB_ROOT="/var/ton-work/db"
 GLOBAL_CONFIG="${DB_ROOT}/ton-global.config"
@@ -22,11 +24,47 @@ fi
 
 # Initialize local config if not present
 if [ ! -f "${DB_ROOT}/config.json" ]; then
-    echo "Initializing validator-engine..."
+    echo "Generating control interface key..."
+    # generate-random-id -m id outputs 3 lines:
+    #   1: {"@type":"pk.ed25519","key":"<base64>"}       (private key)
+    #   2: {"@type":"pub.ed25519","key":"<base64>"}      (public key)
+    #   3: {"@type":"adnl.id.short","id":"<base64>"}     (short id / key hash)
+    CONTROL_OUTPUT=$(generate-random-id -m id)
+    CONTROL_PRIV=$(echo "$CONTROL_OUTPUT" | sed -n '1p')
+    CONTROL_PUB_HASH=$(echo "$CONTROL_OUTPUT" | sed -n '3p' | jq -r '.id')
+
+    # Build local config with liteserver (random key) and control interface
+    cat > /tmp/local-config.json <<LOCALEOF
+{
+    "@type": "config.local",
+    "local_ids": [],
+    "dht": [],
+    "validators": [],
+    "liteservers": [
+        {"@type": "liteserver.config.random.local", "port": ${LITE_PORT}}
+    ],
+    "control": [
+        {
+            "@type": "control.config.local",
+            "priv": ${CONTROL_PRIV},
+            "pub": "${CONTROL_PUB_HASH}",
+            "port": ${CONSOLE_PORT}
+        }
+    ]
+}
+LOCALEOF
+
+    echo "Local config:"
+    cat /tmp/local-config.json
+
+    echo "Initializing validator-engine with liteserver and console..."
     validator-engine \
         -C "${GLOBAL_CONFIG}" \
         --db "${DB_ROOT}" \
-        --ip "${IP}:${VALIDATOR_PORT}" || true
+        --ip "${IP}:${VALIDATOR_PORT}" \
+        -c /tmp/local-config.json || true
+
+    echo "Initialization complete. Config written to ${DB_ROOT}/config.json"
 fi
 
 echo "Starting validator-engine..."
