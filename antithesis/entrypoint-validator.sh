@@ -82,6 +82,27 @@ while true; do
     # Write resident set size (KB) for memory monitoring
     RSS_KB=$(awk '/VmRSS/{print $2}' /proc/1/status 2>/dev/null || echo "-1")
     echo "$RSS_KB" > /shared/validator_mem_rss
+    # Write open TCP socket count for connection leak monitoring
+    SOCK_COUNT=$(wc -l < /proc/1/net/tcp 2>/dev/null || echo "-1")
+    # Subtract 1 for the header line
+    SOCK_COUNT=$((SOCK_COUNT - 1))
+    echo "$SOCK_COUNT" > /shared/validator_sock_count
+    # Write RocksDB LOCK file existence for DB integrity monitoring
+    if [ -f "/var/ton-work/db/LOCK" ]; then
+        echo "1" > /shared/validator_db_lock
+    else
+        echo "0" > /shared/validator_db_lock
+    fi
+    # Write config.json validity for data integrity monitoring
+    if [ -f "/var/ton-work/db/config.json" ]; then
+        if jq empty /var/ton-work/db/config.json 2>/dev/null; then
+            echo "1" > /shared/validator_config_valid
+        else
+            echo "0" > /shared/validator_config_valid
+        fi
+    else
+        echo "-1" > /shared/validator_config_valid
+    fi
     sleep 5
 done &
 

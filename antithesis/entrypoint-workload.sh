@@ -61,6 +61,9 @@ sdk_catalog_always "Validator logs contain no fatal errors"
 sdk_catalog_always "Validator file descriptor count is bounded"
 sdk_catalog_always "Validator memory usage is bounded"
 sdk_catalog_always "Validator log growth rate is bounded"
+sdk_catalog_always "Network socket count is bounded"
+sdk_catalog_always "RocksDB LOCK file exists when validator is healthy"
+sdk_catalog_always "Validator config file remains valid JSON"
 echo "Assertion catalog emitted."
 
 # Signal that setup is complete
