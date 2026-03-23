@@ -53,6 +53,7 @@ sdk_catalog_sometimes "Validator is alive during parallel driver phase"
 sdk_catalog_always "Validator heartbeat is fresh when ports are reachable"
 sdk_catalog_always "Validator downtime is bounded after initial startup"
 sdk_catalog_always "Console port accepts and holds TCP connection"
+sdk_catalog_always "Validator does not crash-loop or oscillate rapidly"
 echo "Assertion catalog emitted."
 
 # Signal that setup is complete
