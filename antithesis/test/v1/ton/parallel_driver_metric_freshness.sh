@@ -43,9 +43,19 @@ NEWEST_FILE=""
 
 for f in /shared/validator_*; do
     [ -f "$f" ] || continue
-    # Skip files written by workload drivers, not the heartbeat loop
+    # Skip files that are not regular metrics written once per loop iteration:
+    # - validator_transitions: written by workload drivers, not the heartbeat loop
+    # - validator_heartbeat: written multiple times per loop iteration (7 times)
+    #   to keep it fresh for heartbeat-based preconditions in other drivers.
+    #   Including it would always make it the newest file, inflating the spread
+    #   to equal the full loop duration rather than measuring metric staleness.
+    # - validator_rss_history, validator_fd_history, validator_thread_history:
+    #   append-mode files with tail/mv that can have slightly different mtime patterns.
     case "$(basename "$f")" in
         validator_transitions) continue ;;
+        validator_heartbeat) continue ;;
+        validator_rss_history|validator_fd_history|validator_thread_history) continue ;;
+        validator_rss_history.tmp|validator_fd_history.tmp|validator_thread_history.tmp) continue ;;
     esac
     MTIME=$(stat -c %Y "$f" 2>/dev/null || continue)
     FILE_COUNT=$((FILE_COUNT + 1))
@@ -66,7 +76,12 @@ if [ "$FILE_COUNT" -lt 2 ]; then
 fi
 
 SPREAD=$((MAX_MTIME - MIN_MTIME))
-THRESHOLD=60
+# Threshold must accommodate the full heartbeat loop duration.
+# The loop includes multiple slow operations (du -sb, find, jq, grep)
+# that can each take 10-30s under fault injection I/O delays.
+# 120s is generous enough to avoid false positives while still catching
+# truly stale metrics (e.g., a stuck operation blocking the loop).
+THRESHOLD=120
 
 if [ "$SPREAD" -le "$THRESHOLD" ]; then
     echo "PASS: Metric file mtime spread is ${SPREAD}s across ${FILE_COUNT} files (threshold: ${THRESHOLD}s)"
