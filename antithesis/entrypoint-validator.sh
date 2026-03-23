@@ -70,7 +70,14 @@ fi
 # Start background heartbeat writer — writes epoch timestamp to shared volume
 # every 5 seconds so the workload can detect hangs/deadlocks.
 echo "Starting heartbeat writer..."
-while true; do date +%s > /shared/validator_heartbeat; sleep 5; done &
+while true; do
+    date +%s > /shared/validator_heartbeat
+    # Write DB directory size (bytes) for data-integrity monitoring
+    if [ -d "/var/ton-work/db" ]; then
+        du -sb /var/ton-work/db 2>/dev/null | cut -f1 > /shared/validator_db_size
+    fi
+    sleep 5
+done &
 
 echo "Starting validator-engine..."
 exec validator-engine \
