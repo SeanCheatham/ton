@@ -79,6 +79,9 @@ sdk_catalog_always "Global config ton-global.config remains valid JSON"
 sdk_catalog_always "Validator thread count is bounded"
 sdk_catalog_sometimes "Network bytes transferred is non-zero when healthy"
 sdk_catalog_always "RocksDB SST files exist when validator is healthy"
+sdk_catalog_always "RocksDB CURRENT file references existing MANIFEST when validator is healthy"
+sdk_catalog_always "Validator context switch rate is bounded when healthy"
+sdk_catalog_always "Validator network bytes are increasing when healthy"
 echo "Assertion catalog emitted."
 
 # Signal that setup is complete

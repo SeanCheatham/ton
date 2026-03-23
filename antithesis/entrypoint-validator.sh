@@ -151,6 +151,18 @@ while true; do
     else
         echo "0" > /shared/validator_current_valid
     fi
+    # Cross-validate CURRENT → MANIFEST reference
+    if [ -n "$CURRENT_FILE" ] && [ -s "$CURRENT_FILE" ]; then
+        CURRENT_DIR=$(dirname "$CURRENT_FILE")
+        MANIFEST_REF=$(cat "$CURRENT_FILE" 2>/dev/null | tr -d '[:space:]')
+        if [ -n "$MANIFEST_REF" ] && [ -f "${CURRENT_DIR}/${MANIFEST_REF}" ]; then
+            echo "1" > /shared/validator_current_manifest_consistent
+        else
+            echo "0" > /shared/validator_current_manifest_consistent
+        fi
+    else
+        echo "-1" > /shared/validator_current_manifest_consistent
+    fi
     # Write count of leaked deleted file descriptors
     DELETED_FDS=$(ls -la /proc/1/fd 2>/dev/null | grep -c '(deleted)' || echo "0")
     echo "$DELETED_FDS" > /shared/validator_deleted_fds
@@ -173,6 +185,10 @@ while true; do
     # Write RocksDB SST file count for data integrity monitoring
     SST_COUNT=$(find /var/ton-work/db -name "*.sst" -type f 2>/dev/null | wc -l)
     echo "$SST_COUNT" > /shared/validator_sst_count
+    # Write voluntary + nonvoluntary context switches for scheduling health monitoring
+    VOL_CS=$(awk '/^voluntary_ctxt_switches:/{print $2}' /proc/1/status 2>/dev/null || echo "-1")
+    NONVOL_CS=$(awk '/^nonvoluntary_ctxt_switches:/{print $2}' /proc/1/status 2>/dev/null || echo "-1")
+    echo "${VOL_CS}:${NONVOL_CS}" > /shared/validator_ctxt_switches
     sleep 5
 done &
 
