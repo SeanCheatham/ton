@@ -50,6 +50,7 @@ sdk_catalog_always "Validator subsystem consistency: all ports reachable togethe
 sdk_catalog_sometimes "Validator recovers fully after fault injection"
 sdk_catalog_sometimes "Validator recovers mid-test after going down"
 sdk_catalog_sometimes "Validator is alive during parallel driver phase"
+sdk_catalog_always "Validator heartbeat is fresh when ports are reachable"
 echo "Assertion catalog emitted."
 
 # Signal that setup is complete

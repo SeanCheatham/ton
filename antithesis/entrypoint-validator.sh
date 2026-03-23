@@ -67,6 +67,11 @@ LOCALEOF
     echo "Initialization complete. Config written to ${DB_ROOT}/config.json"
 fi
 
+# Start background heartbeat writer — writes epoch timestamp to shared volume
+# every 5 seconds so the workload can detect hangs/deadlocks.
+echo "Starting heartbeat writer..."
+while true; do date +%s > /shared/validator_heartbeat; sleep 5; done &
+
 echo "Starting validator-engine..."
 exec validator-engine \
     -C "${GLOBAL_CONFIG}" \
