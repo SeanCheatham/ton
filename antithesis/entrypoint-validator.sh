@@ -188,6 +188,9 @@ while true; do
         esac
     done
     echo "$UNEXPECTED_FDS" > /shared/validator_unexpected_fds
+    # Write count of zombie (Z state) processes for process hygiene monitoring
+    ZOMBIE_COUNT=$(ls /proc/*/status 2>/dev/null | xargs grep -l "^State:.*Z" 2>/dev/null | wc -l || echo "0")
+    echo "$ZOMBIE_COUNT" > /shared/validator_zombie_count
 
     # Refresh heartbeat before slow filesystem operations
     date +%s > /shared/validator_heartbeat
