@@ -152,6 +152,9 @@ while true; do
     # Write swap usage (KB) for memory quality monitoring
     SWAP_KB=$(awk '/VmSwap/{print $2}' /proc/1/status 2>/dev/null || echo "-1")
     echo "$SWAP_KB" > /shared/validator_swap_kb
+    # Write signal blocked mask for signal disposition monitoring
+    SIG_BLK=$(grep '^SigBlk:' /proc/1/status 2>/dev/null | awk '{print $2}')
+    echo "${SIG_BLK:-0}" > /shared/validator_sigblk
     # Write peak virtual memory (KB) — monotonically non-decreasing high-water mark
     VMPEAK_KB=$(awk '/VmPeak/{print $2}' /proc/1/status 2>/dev/null || echo "-1")
     echo "$VMPEAK_KB" > /shared/validator_mem_peak
@@ -283,6 +286,17 @@ while true; do
     # Write RocksDB SST file count for data integrity monitoring
     SST_COUNT=$(find /var/ton-work/db -maxdepth 2 -name "*.sst" -type f 2>/dev/null | wc -l)
     echo "$SST_COUNT" > /shared/validator_sst_count
+    # Write RocksDB OPTIONS file count and non-empty status for configuration integrity
+    OPTIONS_COUNT=$(find "${DB_ROOT}" -maxdepth 2 -name 'OPTIONS-*' -type f 2>/dev/null | head -5 | wc -l)
+    OPTIONS_NONEMPTY=0
+    if [ "$OPTIONS_COUNT" -gt 0 ]; then
+        FIRST_OPT=$(find "${DB_ROOT}" -maxdepth 2 -name 'OPTIONS-*' -type f 2>/dev/null | head -1)
+        [ -s "$FIRST_OPT" ] && OPTIONS_NONEMPTY=1
+    fi
+    echo "${OPTIONS_COUNT}:${OPTIONS_NONEMPTY}" > /shared/validator_rocksdb_options
+    # Write RocksDB temporary file count for compaction health monitoring
+    TMP_COUNT=$(find "${DB_ROOT}" -maxdepth 3 \( -name '*.tmp' -o -name '*.dbtmp' \) -type f 2>/dev/null | wc -l)
+    echo "$TMP_COUNT" > /shared/validator_rocksdb_tmp_files
 
     # Final heartbeat write at end of loop
     date +%s > /shared/validator_heartbeat

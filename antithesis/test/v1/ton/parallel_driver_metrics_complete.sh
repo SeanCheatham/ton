@@ -86,6 +86,9 @@ EXPECTED_FILES=(
     /shared/validator_current_manifest_consistent
     /shared/validator_config_keys
     /shared/validator_tcp_states
+    /shared/validator_rocksdb_options
+    /shared/validator_rocksdb_tmp_files
+    /shared/validator_sigblk
 )
 
 TOTAL=${#EXPECTED_FILES[@]}

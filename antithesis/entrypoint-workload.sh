@@ -96,6 +96,9 @@ sdk_catalog_always "Validator has no zombie child processes when healthy"
 sdk_catalog_always "Validator config.json contains expected structural keys"
 sdk_catalog_always "Validator metric files are all fresh when healthy"
 sdk_catalog_always "Validator TCP connections are in expected states when healthy"
+sdk_catalog_always "RocksDB OPTIONS file exists and is non-empty when validator is healthy"
+sdk_catalog_always "Validator has no stale RocksDB temporary files when healthy"
+sdk_catalog_always "Validator critical signals are not blocked when healthy"
 echo "Assertion catalog emitted."
 
 # Signal that setup is complete
