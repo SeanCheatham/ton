@@ -183,6 +183,21 @@ while true; do
     # Sum rx_bytes + tx_bytes across all interfaces (skip lo), fields 2 and 10
     NET_BYTES=$(awk 'NR>2 && $1 !~ /lo:/ {rx+=$2; tx+=$10} END {print rx+tx}' /proc/1/net/dev 2>/dev/null || echo "-1")
     echo "$NET_BYTES" > /shared/validator_net_bytes
+    # Sum rx_errs + tx_errs + rx_drop + tx_drop across all interfaces (skip lo)
+    # /proc/net/dev fields: 1=iface 2=rx_bytes 3=rx_packets 4=rx_errs 5=rx_drop ... 10=tx_bytes 11=tx_packets 12=tx_errs 13=tx_drop
+    NET_ERRORS=$(awk 'NR>2 && $1 !~ /lo:/ {e+=$4+$5+$12+$13} END {print e+0}' /proc/1/net/dev 2>/dev/null || echo "-1")
+    echo "$NET_ERRORS" > /shared/validator_net_errors
+    # Scan RocksDB LOG files for corruption/IO error indicators
+    ROCKSDB_LOG=$(find /var/ton-work/db -maxdepth 2 -name "LOG" -type f 2>/dev/null | head -5)
+    CORRUPTION_COUNT=0
+    for logf in $ROCKSDB_LOG; do
+        COUNT=$(grep -ciE "Corruption:|IO error|checksum mismatch|bad block contents|Repair" "$logf" 2>/dev/null || echo "0")
+        CORRUPTION_COUNT=$((CORRUPTION_COUNT + COUNT))
+    done
+    echo "$CORRUPTION_COUNT" > /shared/validator_rocksdb_errors
+    # Write swap usage (KB) for memory quality monitoring
+    SWAP_KB=$(awk '/VmSwap/{print $2}' /proc/1/status 2>/dev/null || echo "-1")
+    echo "$SWAP_KB" > /shared/validator_swap_kb
     # Write RocksDB SST file count for data integrity monitoring
     SST_COUNT=$(find /var/ton-work/db -name "*.sst" -type f 2>/dev/null | wc -l)
     echo "$SST_COUNT" > /shared/validator_sst_count
