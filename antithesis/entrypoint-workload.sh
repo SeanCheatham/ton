@@ -59,6 +59,8 @@ sdk_catalog_always "Liteserver port accepts and holds TCP connection"
 sdk_catalog_always "Validator heartbeat timestamp is monotonically non-decreasing"
 sdk_catalog_always "Validator logs contain no fatal errors"
 sdk_catalog_always "Validator file descriptor count is bounded"
+sdk_catalog_always "Validator memory usage is bounded"
+sdk_catalog_always "Validator log growth rate is bounded"
 echo "Assertion catalog emitted."
 
 # Signal that setup is complete

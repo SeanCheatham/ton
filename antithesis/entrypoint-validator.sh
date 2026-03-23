@@ -79,6 +79,9 @@ while true; do
     # Write open file descriptor count for resource monitoring
     FD_COUNT=$(ls /proc/1/fd 2>/dev/null | wc -l || echo "-1")
     echo "$FD_COUNT" > /shared/validator_fd_count
+    # Write resident set size (KB) for memory monitoring
+    RSS_KB=$(awk '/VmRSS/{print $2}' /proc/1/status 2>/dev/null || echo "-1")
+    echo "$RSS_KB" > /shared/validator_mem_rss
     sleep 5
 done &
 
