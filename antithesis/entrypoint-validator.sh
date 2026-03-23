@@ -152,6 +152,9 @@ while true; do
     # Write swap usage (KB) for memory quality monitoring
     SWAP_KB=$(awk '/VmSwap/{print $2}' /proc/1/status 2>/dev/null || echo "-1")
     echo "$SWAP_KB" > /shared/validator_swap_kb
+    # Write peak virtual memory (KB) — monotonically non-decreasing high-water mark
+    VMPEAK_KB=$(awk '/VmPeak/{print $2}' /proc/1/status 2>/dev/null || echo "-1")
+    echo "$VMPEAK_KB" > /shared/validator_mem_peak
     # Write count of leaked deleted file descriptors
     DELETED_FDS=$(ls -la /proc/1/fd 2>/dev/null | grep -c '(deleted)' || echo "0")
     echo "$DELETED_FDS" > /shared/validator_deleted_fds

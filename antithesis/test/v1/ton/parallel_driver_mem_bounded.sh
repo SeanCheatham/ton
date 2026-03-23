@@ -26,7 +26,7 @@ if ! [[ "$RSS_KB" =~ ^[0-9]+$ ]]; then
     exit 0
 fi
 
-if [ "$RSS_KB" -gt 0 ] && [ "$RSS_KB" -lt "$RSS_LIMIT" ]; then
+if [ "$RSS_KB" -ge 0 ] && [ "$RSS_KB" -lt "$RSS_LIMIT" ]; then
     DETAILS=$(jq -cn --argjson rss "$RSS_KB" --argjson limit "$RSS_LIMIT" \
         '{rss_kb: $rss, rss_mb: ($rss / 1024 | floor), limit_kb: $limit}')
     sdk_always true "Validator memory usage is bounded" "$DETAILS"

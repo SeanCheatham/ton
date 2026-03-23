@@ -88,6 +88,8 @@ sdk_catalog_always "Validator swap usage is zero when healthy"
 sdk_catalog_always "Validator oom_score is bounded when healthy"
 sdk_catalog_always "Validator disk I/O bytes are progressing when healthy"
 sdk_catalog_always "Validator has no unexpected file descriptor types"
+sdk_catalog_always "RocksDB WAL-to-SST ratio is healthy when validator is running"
+sdk_catalog_always "Validator peak memory (VmPeak) is bounded"
 echo "Assertion catalog emitted."
 
 # Signal that setup is complete
