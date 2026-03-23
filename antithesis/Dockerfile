@@ -18,7 +18,7 @@ RUN apt-get update && \
         apt install libc-bin && \
         apt-get install -y build-essential cmake clang gperf wget git \
         ninja-build pkg-config autoconf automake libtool \
-        libjemalloc-dev lsb-release software-properties-common gnupg
+        libjemalloc-dev lsb-release software-properties-common gnupg ccache
 
 RUN wget https://apt.llvm.org/llvm.sh && \
     chmod +x llvm.sh && \
@@ -27,7 +27,8 @@ RUN wget https://apt.llvm.org/llvm.sh && \
 
 ENV CC=/usr/bin/clang-21
 ENV CXX=/usr/bin/clang++-21
-ENV CCACHE_DISABLE=1
+ENV CCACHE_DIR=/ccache
+ENV CCACHE_MAXSIZE=5G
 
 WORKDIR /
 RUN mkdir ton
@@ -35,10 +36,14 @@ WORKDIR /ton
 
 COPY ./ ./
 
-RUN mkdir build && \
-        cd build && \
-        cmake -GNinja -DCMAKE_BUILD_TYPE=Release -DPORTABLE=1 -DTON_ARCH= -DTON_USE_JEMALLOC=ON .. && \
-        ninja validator-engine generate-random-id
+RUN --mount=type=cache,target=/ton/build \
+    --mount=type=cache,target=/ccache \
+    cd /ton/build && \
+    cmake -GNinja -DCMAKE_BUILD_TYPE=Release -DPORTABLE=1 -DTON_ARCH= -DTON_USE_JEMALLOC=ON \
+          -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache .. && \
+    ninja validator-engine generate-random-id && \
+    mkdir -p /build-out && \
+    cp validator-engine/validator-engine utils/generate-random-id /build-out/
 
 # ---------------------------------------------------------------------------
 # Runtime image: validator-engine (SUT)
@@ -52,8 +57,8 @@ RUN apt-get update && \
 
 RUN mkdir -p /var/ton-work/db /var/ton-work/scripts /symbols
 
-COPY --from=builder /ton/build/validator-engine/validator-engine /usr/local/bin/
-COPY --from=builder /ton/build/utils/generate-random-id /usr/local/bin/
+COPY --from=builder /build-out/validator-engine /usr/local/bin/
+COPY --from=builder /build-out/generate-random-id /usr/local/bin/
 
 # Expose debug symbols for Antithesis symbolization
 RUN ln -s /usr/local/bin/validator-engine /symbols/validator-engine
