@@ -10,10 +10,33 @@ set -euo pipefail
 source "$(dirname "$0")/helper_sdk.sh"
 
 VALIDATOR_HOST="${VALIDATOR_HOST:-validator}"
+HEARTBEAT_MAX_AGE=60
+ASSERTION_NAME="RocksDB SST files exist when validator is healthy"
+# Grace period: don't assert until validator has been up for at least 60s
+# (SST files may not exist immediately after startup before first memtable flush)
+STARTUP_GRACE=60
+
+# Use heartbeat-only precondition instead of all-3-ports.
+if [ -f /shared/validator_heartbeat ]; then
+    HB_TS=$(cat /shared/validator_heartbeat 2>/dev/null | tr -d '[:space:]')
+    NOW=$(date +%s)
+    if [[ "$HB_TS" =~ ^[0-9]+$ ]]; then
+        AGE=$((NOW - HB_TS))
+        if [ "$AGE" -gt "$HEARTBEAT_MAX_AGE" ]; then
+            echo "Heartbeat stale (${AGE}s), skipping"
+            exit 0
+        fi
+    else
+        echo "Heartbeat value invalid, skipping"
+        exit 0
+    fi
+else
+    echo "Heartbeat file not present yet, skipping"
+    exit 0
+fi
 
 if [ ! -f /shared/validator_sst_count ]; then
     echo "SST count file not present yet, skipping"
-    sleep 10
     exit 0
 fi
 
@@ -21,54 +44,28 @@ SST_COUNT=$(cat /shared/validator_sst_count 2>/dev/null || echo "-1")
 
 if ! [[ "$SST_COUNT" =~ ^[0-9]+$ ]]; then
     echo "Invalid SST count value: $SST_COUNT, skipping"
-    sleep 10
     exit 0
 fi
 
-# Check if all 3 ports are reachable
-udp_up=false
-console_up=false
-lite_up=false
-nc -z -w 1 -u "${VALIDATOR_HOST}" 30001 2>/dev/null && udp_up=true
-nc -z -w 1 "${VALIDATOR_HOST}" 30002 2>/dev/null && console_up=true
-nc -z -w 1 "${VALIDATOR_HOST}" 30003 2>/dev/null && lite_up=true
-
-if [[ "$udp_up" != "true" || "$console_up" != "true" || "$lite_up" != "true" ]]; then
-    echo "Validator not fully healthy, skipping assertion"
-    sleep 10
-    exit 0
+# Time-based grace period: use heartbeat mtime as a proxy for how long the
+# validator has been running. If the heartbeat file was created less than
+# STARTUP_GRACE seconds ago, skip — SST files may not exist yet.
+HB_CTIME=$(stat -c %W /shared/validator_heartbeat 2>/dev/null || echo "0")
+if [ "$HB_CTIME" = "0" ]; then
+    # Fallback: use mtime if birth time not available
+    HB_CTIME=$(stat -c %Y /shared/validator_heartbeat 2>/dev/null || echo "0")
 fi
+UPTIME_EST=$(($(date +%s) - HB_CTIME))
 
-# Confirm heartbeat freshness (< 30s old)
-if [ -f /shared/validator_heartbeat ]; then
-    HEARTBEAT=$(cat /shared/validator_heartbeat 2>/dev/null || echo "0")
-    NOW=$(date +%s)
-    AGE=$((NOW - HEARTBEAT))
-    if [ "$AGE" -gt 30 ]; then
-        echo "Heartbeat stale (${AGE}s old), skipping"
-        sleep 10
-        exit 0
-    fi
-fi
-
-# Check DB maturity: a freshly started standalone validator may not have flushed
-# any memtables to SST files yet. Only assert if the DB is mature enough
-# (has a non-trivial size indicating data has been written to disk).
-DB_SIZE=0
-if [ -f /shared/validator_db_size ]; then
-    DB_SIZE=$(cat /shared/validator_db_size 2>/dev/null || echo "0")
-fi
-
-DETAILS=$(jq -cn --argjson count "$SST_COUNT" --argjson db_size "$DB_SIZE" '{sst_count: $count, db_size_bytes: $db_size}')
+DETAILS=$(jq -cn --argjson count "$SST_COUNT" --argjson uptime "$UPTIME_EST" '{sst_count: $count, estimated_uptime_seconds: $uptime}')
 
 if [ "$SST_COUNT" -gt 0 ]; then
-    sdk_always true "RocksDB SST files exist when validator is healthy" "$DETAILS"
-elif [ "$DB_SIZE" -lt 1048576 ]; then
-    # DB is less than 1MB — too early for SST files to exist, skip
-    echo "DB size ${DB_SIZE} bytes is too small for SST files, skipping assertion"
+    sdk_always true "$ASSERTION_NAME" "$DETAILS"
+elif [ "$UPTIME_EST" -lt "$STARTUP_GRACE" ]; then
+    # Too early after startup — SST files may not exist yet, skip
+    echo "Validator uptime ~${UPTIME_EST}s < ${STARTUP_GRACE}s grace period, skipping assertion"
 else
-    sdk_always false "RocksDB SST files exist when validator is healthy" "$DETAILS"
+    sdk_always false "$ASSERTION_NAME" "$DETAILS"
 fi
 
-sleep 10
 exit 0

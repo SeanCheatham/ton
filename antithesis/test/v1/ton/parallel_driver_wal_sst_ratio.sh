@@ -3,15 +3,24 @@ source /opt/antithesis/test/v1/ton/helper_sdk.sh
 VALIDATOR_HOST="${VALIDATOR_HOST:-validator}"
 PROPERTY="RocksDB WAL-to-SST ratio is healthy when validator is running"
 RATIO_LIMIT=10
+HEARTBEAT_MAX_AGE=60
 
-# Only check when healthy (all 3 ports up)
-udp_up=false; console_up=false; lite_up=false
-nc -z -w 1 -u "$VALIDATOR_HOST" 30001 2>/dev/null && udp_up=true
-nc -z -w 1 "$VALIDATOR_HOST" 30002 2>/dev/null && console_up=true
-nc -z -w 1 "$VALIDATOR_HOST" 30003 2>/dev/null && lite_up=true
-
-if [[ "$udp_up" != "true" || "$console_up" != "true" || "$lite_up" != "true" ]]; then
-    echo "Validator not fully healthy, skipping WAL-to-SST ratio check"
+# Use heartbeat-only precondition instead of all-3-ports.
+if [ -f /shared/validator_heartbeat ]; then
+    HB_TS=$(cat /shared/validator_heartbeat 2>/dev/null | tr -d '[:space:]')
+    NOW=$(date +%s)
+    if [[ "$HB_TS" =~ ^[0-9]+$ ]]; then
+        AGE=$((NOW - HB_TS))
+        if [ "$AGE" -gt "$HEARTBEAT_MAX_AGE" ]; then
+            echo "Heartbeat stale (${AGE}s), skipping"
+            exit 0
+        fi
+    else
+        echo "Heartbeat value invalid, skipping"
+        exit 0
+    fi
+else
+    echo "Heartbeat file not present yet, skipping"
     exit 0
 fi
 

@@ -13,9 +13,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/helper_sdk.sh"
 
 VALIDATOR_HOST="${VALIDATOR_HOST:-validator}"
-UDP_PORT="${VALIDATOR_PORT:-30001}"
-CONSOLE_PORT="${CONSOLE_PORT:-30002}"
-LITE_PORT="${LITE_PORT:-30003}"
+HEARTBEAT_MAX_AGE=60
 
 HASH_FILE="/shared/validator_cmdline_hash"
 FIRST_FILE="/shared/validator_cmdline_first"
@@ -27,21 +25,7 @@ sdk_catalog_always "${ASSERTION_NAME}"
 
 echo "Checking validator process command line stability..."
 
-# Step 1: Check all 3 ports — only assert when validator is fully healthy
-udp_up=false
-console_up=false
-lite_up=false
-
-nc -z -u -w 2 "${VALIDATOR_HOST}" "${UDP_PORT}" 2>/dev/null && udp_up=true
-nc -z -w 1 "${VALIDATOR_HOST}" "${CONSOLE_PORT}" 2>/dev/null && console_up=true
-nc -z -w 1 "${VALIDATOR_HOST}" "${LITE_PORT}" 2>/dev/null && lite_up=true
-
-if [[ "$udp_up" != "true" || "$console_up" != "true" || "$lite_up" != "true" ]]; then
-    echo "SKIP: not all ports are up (udp=${udp_up}, console=${console_up}, lite=${lite_up})"
-    exit 0
-fi
-
-# Step 2: Check heartbeat freshness
+# Use heartbeat-only precondition instead of all-3-ports.
 if [[ ! -f "$HEARTBEAT_FILE" ]]; then
     echo "SKIP: heartbeat file does not exist yet"
     exit 0
@@ -54,7 +38,7 @@ if [[ -z "$hb_ts" ]] || ! [[ "$hb_ts" =~ ^[0-9]+$ ]]; then
     exit 0
 fi
 age=$((now - hb_ts))
-if [[ "$age" -gt 30 ]]; then
+if [[ "$age" -gt "$HEARTBEAT_MAX_AGE" ]]; then
     echo "SKIP: heartbeat is stale (${age}s old)"
     exit 0
 fi

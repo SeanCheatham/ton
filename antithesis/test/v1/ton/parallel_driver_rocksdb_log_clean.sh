@@ -10,10 +10,30 @@ set -euo pipefail
 source "$(dirname "$0")/helper_sdk.sh"
 
 VALIDATOR_HOST="${VALIDATOR_HOST:-validator}"
+HEARTBEAT_MAX_AGE=60
+
+# Use heartbeat-only precondition instead of all-3-ports.
+# The heartbeat proves the validator process is actively running.
+if [ -f /shared/validator_heartbeat ]; then
+    HB_TS=$(cat /shared/validator_heartbeat 2>/dev/null | tr -d '[:space:]')
+    NOW=$(date +%s)
+    if [[ "$HB_TS" =~ ^[0-9]+$ ]]; then
+        AGE=$((NOW - HB_TS))
+        if [ "$AGE" -gt "$HEARTBEAT_MAX_AGE" ]; then
+            echo "Heartbeat stale (${AGE}s), skipping"
+            exit 0
+        fi
+    else
+        echo "Heartbeat value invalid, skipping"
+        exit 0
+    fi
+else
+    echo "Heartbeat file not present yet, skipping"
+    exit 0
+fi
 
 if [ ! -f /shared/validator_rocksdb_errors ]; then
     echo "RocksDB errors file not present yet, skipping"
-    sleep 10
     exit 0
 fi
 
@@ -21,27 +41,11 @@ CORRUPTION_COUNT=$(cat /shared/validator_rocksdb_errors 2>/dev/null || echo "-1"
 
 if [ "$CORRUPTION_COUNT" = "-1" ]; then
     echo "RocksDB errors unavailable, skipping"
-    sleep 10
     exit 0
 fi
 
 if ! [[ "$CORRUPTION_COUNT" =~ ^[0-9]+$ ]]; then
     echo "Invalid corruption count: $CORRUPTION_COUNT, skipping"
-    sleep 10
-    exit 0
-fi
-
-# Check if all 3 ports are reachable
-udp_up=false
-console_up=false
-lite_up=false
-nc -z -w 1 -u "${VALIDATOR_HOST}" 30001 2>/dev/null && udp_up=true
-nc -z -w 1 "${VALIDATOR_HOST}" 30002 2>/dev/null && console_up=true
-nc -z -w 1 "${VALIDATOR_HOST}" 30003 2>/dev/null && lite_up=true
-
-if [[ "$udp_up" != "true" || "$console_up" != "true" || "$lite_up" != "true" ]]; then
-    echo "Validator not fully healthy, skipping assertion"
-    sleep 10
     exit 0
 fi
 
@@ -52,5 +56,4 @@ else
     sdk_always true "RocksDB LOG file contains no corruption or IO error warnings" '{"corruption_count":0}'
 fi
 
-sleep 10
 exit 0

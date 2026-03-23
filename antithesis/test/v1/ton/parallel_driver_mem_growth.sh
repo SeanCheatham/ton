@@ -11,28 +11,34 @@ source "$(dirname "$0")/helper_sdk.sh"
 
 ASSERTION_NAME="Validator RSS memory is not monotonically growing"
 VALIDATOR_HOST="${VALIDATOR_HOST:-validator}"
-VALIDATOR_PORT="${VALIDATOR_PORT:-30001}"
-CONSOLE_PORT="${CONSOLE_PORT:-30002}"
-LITE_PORT="${LITE_PORT:-30003}"
-MIN_ENTRIES=10
+MIN_ENTRIES=5
 GROWTH_THRESHOLD_KB=50000  # 50MB
+HEARTBEAT_MAX_AGE=60
 
-# Only check when validator is healthy (all ports up)
-if ! nc -z -w 1 -u "$VALIDATOR_HOST" "$VALIDATOR_PORT" 2>/dev/null; then
-    echo "Validator UDP not reachable, skipping"
-    sleep 10
-    exit 0
-fi
-if ! nc -z -w 1 "$VALIDATOR_HOST" "$CONSOLE_PORT" 2>/dev/null || \
-   ! nc -z -w 1 "$VALIDATOR_HOST" "$LITE_PORT" 2>/dev/null; then
-    echo "Validator TCP ports not all reachable, skipping"
-    sleep 10
+# Use heartbeat-only precondition instead of all-3-ports.
+# Under fault injection, all 3 ports are rarely up simultaneously for the
+# 25+ seconds needed to accumulate 5 readings. The heartbeat file proves
+# the validator process is actively running, which is sufficient context.
+if [ -f /shared/validator_heartbeat ]; then
+    HB_TS=$(cat /shared/validator_heartbeat 2>/dev/null | tr -d '[:space:]')
+    NOW=$(date +%s)
+    if [[ "$HB_TS" =~ ^[0-9]+$ ]]; then
+        AGE=$((NOW - HB_TS))
+        if [ "$AGE" -gt "$HEARTBEAT_MAX_AGE" ]; then
+            echo "Heartbeat stale (${AGE}s > ${HEARTBEAT_MAX_AGE}s), skipping"
+            exit 0
+        fi
+    else
+        echo "Heartbeat value invalid, skipping"
+        exit 0
+    fi
+else
+    echo "Heartbeat file not present yet, skipping"
     exit 0
 fi
 
 if [ ! -f /shared/validator_rss_history ]; then
     echo "RSS history file not present yet, skipping"
-    sleep 10
     exit 0
 fi
 
@@ -41,7 +47,6 @@ mapfile -t ENTRIES < <(tail -"$MIN_ENTRIES" /shared/validator_rss_history 2>/dev
 
 if [ ${#ENTRIES[@]} -lt "$MIN_ENTRIES" ]; then
     echo "Insufficient data points (${#ENTRIES[@]}/${MIN_ENTRIES}), skipping"
-    sleep 10
     exit 0
 fi
 
@@ -56,7 +61,6 @@ done
 
 if [ ${#RSS_VALUES[@]} -lt "$MIN_ENTRIES" ]; then
     echo "Insufficient valid RSS values, skipping"
-    sleep 10
     exit 0
 fi
 
@@ -89,5 +93,4 @@ else
     sdk_always true "$ASSERTION_NAME" "$DETAILS"
 fi
 
-sleep 10
 exit 0

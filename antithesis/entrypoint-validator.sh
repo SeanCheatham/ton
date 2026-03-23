@@ -298,6 +298,11 @@ while true; do
     # Write RocksDB MANIFEST file count for data integrity monitoring
     MANIFEST_COUNT=$(find /var/ton-work/db -maxdepth 2 -name "MANIFEST-*" -type f 2>/dev/null | wc -l)
     echo "$MANIFEST_COUNT" > /shared/validator_manifest_count
+    # Write RocksDB MANIFEST file size (bytes) for metadata growth monitoring
+    MANIFEST_FILE=$(cat /var/ton-work/db/CURRENT 2>/dev/null | tr -d '[:space:]')
+    if [ -n "$MANIFEST_FILE" ] && [ -f "/var/ton-work/db/$MANIFEST_FILE" ]; then
+        stat -c%s "/var/ton-work/db/$MANIFEST_FILE" > /shared/validator_manifest_size
+    fi
     # Write RocksDB CURRENT file validity (root of metadata chain: CURRENT → MANIFEST → SST)
     CURRENT_FILE=$(find /var/ton-work/db -maxdepth 2 -name CURRENT -type f 2>/dev/null | head -1)
     if [ -n "$CURRENT_FILE" ] && [ -s "$CURRENT_FILE" ]; then

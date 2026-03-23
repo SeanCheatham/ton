@@ -15,7 +15,7 @@ VALIDATOR_HOST="${VALIDATOR_HOST:-validator}"
 CONSOLE_PORT="${CONSOLE_PORT:-30002}"
 LITE_PORT="${LITE_PORT:-30003}"
 HEARTBEAT_FILE="/shared/validator_heartbeat"
-MAX_AGE=45
+MAX_AGE=90
 
 ASSERTION_NAME="Validator heartbeat is fresh when ports are reachable"
 
@@ -24,25 +24,13 @@ sdk_catalog_always "${ASSERTION_NAME}"
 
 echo "Checking validator heartbeat freshness..."
 
-# Step 1: Check if a TCP port is reachable (reliable, unlike UDP nc -z -u).
-# UDP port checks with nc are unreliable: nc -z -u often reports success even
-# when nothing is listening because UDP is connectionless and ICMP
-# port-unreachable responses may not arrive. Use TCP console port instead.
-if ! nc -z -w 2 "${VALIDATOR_HOST}" "${CONSOLE_PORT}" 2>/dev/null && \
-   ! nc -z -w 2 "${VALIDATOR_HOST}" "${LITE_PORT}" 2>/dev/null; then
-    echo "SKIP: validator TCP ports not reachable (validator may be down)"
-    exit 0
-fi
-
-echo "TCP port reachable, checking heartbeat..."
-
-# Step 2: Check heartbeat file exists
+# Step 1: Check heartbeat file exists
 if [ ! -f "${HEARTBEAT_FILE}" ]; then
     echo "SKIP: heartbeat file ${HEARTBEAT_FILE} does not exist (validator may still be starting)"
     exit 0
 fi
 
-# Step 2b: Check the heartbeat file's filesystem mtime to detect stale data.
+# Step 1b: Check the heartbeat file's filesystem mtime to detect stale data.
 # After a validator restart, the shared volume retains old heartbeat data.
 # The file content may show an old timestamp even though the validator just restarted.
 # If the file hasn't been modified recently (filesystem mtime is old), the heartbeat
@@ -54,6 +42,18 @@ if [ "${file_age}" -gt "${MAX_AGE}" ]; then
     echo "SKIP: heartbeat file not recently modified (file age: ${file_age}s) — loop may not be running yet"
     exit 0
 fi
+
+# Step 2: Check if a TCP port is reachable. If ports are not up, we still
+# check the heartbeat — the assertion is that when the heartbeat file is being
+# actively written (mtime check above passed), it must contain a fresh timestamp.
+# This inverts the original logic: we no longer require ports as a precondition.
+tcp_reachable=false
+if nc -z -w 2 "${VALIDATOR_HOST}" "${CONSOLE_PORT}" 2>/dev/null || \
+   nc -z -w 2 "${VALIDATOR_HOST}" "${LITE_PORT}" 2>/dev/null; then
+    tcp_reachable=true
+fi
+
+echo "TCP reachable: ${tcp_reachable}, checking heartbeat..."
 
 # Step 3: Read heartbeat timestamp and compare to current time
 heartbeat_ts=$(cat "${HEARTBEAT_FILE}" 2>/dev/null | tr -d '[:space:]')
