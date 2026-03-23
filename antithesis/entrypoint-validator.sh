@@ -88,7 +88,9 @@ while true; do
     SOCK_COUNT=$((SOCK_COUNT - 1))
     echo "$SOCK_COUNT" > /shared/validator_sock_count
     # Write RocksDB LOCK file existence for DB integrity monitoring
-    if [ -f "/var/ton-work/db/LOCK" ]; then
+    # RocksDB may place the LOCK file in a subdirectory (e.g., /var/ton-work/db/celldb/LOCK)
+    LOCK_COUNT=$(find /var/ton-work/db -name LOCK -type f 2>/dev/null | head -1 | wc -l)
+    if [ "$LOCK_COUNT" -gt 0 ]; then
         echo "1" > /shared/validator_db_lock
     else
         echo "0" > /shared/validator_db_lock
