@@ -84,6 +84,8 @@ EXPECTED_FILES=(
     /shared/validator_db_mtime
     /shared/validator_udp_bound
     /shared/validator_current_manifest_consistent
+    /shared/validator_config_keys
+    /shared/validator_tcp_states
 )
 
 TOTAL=${#EXPECTED_FILES[@]}

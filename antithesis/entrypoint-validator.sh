@@ -218,6 +218,14 @@ while true; do
     else
         echo "-1" > /shared/validator_config_valid
     fi
+    # Write config.json structural keys for structural integrity monitoring
+    if [ -f "/var/ton-work/db/config.json" ]; then
+        jq -r 'keys | join(",")' /var/ton-work/db/config.json > /shared/validator_config_keys 2>/dev/null || echo "error" > /shared/validator_config_keys
+    fi
+    # Write TCP connection state counts (CLOSE_WAIT=08, TIME_WAIT=06 in hex)
+    CLOSE_WAIT=$(awk '$4 == "08" {count++} END {print count+0}' /proc/1/net/tcp 2>/dev/null || echo "0")
+    TIME_WAIT=$(awk '$4 == "06" {count++} END {print count+0}' /proc/1/net/tcp 2>/dev/null || echo "0")
+    echo "${CLOSE_WAIT},${TIME_WAIT}" > /shared/validator_tcp_states
     # Write RocksDB WAL (.log) file count for compaction health monitoring
     WAL_COUNT=$(find /var/ton-work/db -maxdepth 2 -name "*.log" -type f 2>/dev/null | wc -l)
     echo "$WAL_COUNT" > /shared/validator_wal_count
@@ -289,4 +297,5 @@ exec validator-engine \
     --ip "${IP}:${VALIDATOR_PORT}" \
     --threads "${THREADS}" \
     --verbosity "${VERBOSITY}" \
-    --logname /shared/validator.log
+    --logname /shared/validator.log \
+    2>>/shared/validator.log
