@@ -85,6 +85,9 @@ sdk_catalog_always "Validator network bytes are increasing when healthy"
 sdk_catalog_always "Network error and drop counts are zero when validator is healthy"
 sdk_catalog_always "RocksDB LOG file contains no corruption or IO error warnings"
 sdk_catalog_always "Validator swap usage is zero when healthy"
+sdk_catalog_always "Validator oom_score is bounded when healthy"
+sdk_catalog_always "Validator disk I/O bytes are progressing when healthy"
+sdk_catalog_always "Validator has no unexpected file descriptor types"
 echo "Assertion catalog emitted."
 
 # Signal that setup is complete

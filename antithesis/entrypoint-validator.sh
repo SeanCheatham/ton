@@ -165,6 +165,26 @@ while true; do
     VOL_CS=$(awk '/^voluntary_ctxt_switches:/{print $2}' /proc/1/status 2>/dev/null || echo "-1")
     NONVOL_CS=$(awk '/^nonvoluntary_ctxt_switches:/{print $2}' /proc/1/status 2>/dev/null || echo "-1")
     echo "${VOL_CS}:${NONVOL_CS}" > /shared/validator_ctxt_switches
+    # Write OOM score for OOM kill risk monitoring
+    OOM_SCORE=$(cat /proc/1/oom_score 2>/dev/null || echo "-1")
+    echo "$OOM_SCORE" > /shared/validator_oom_score
+    # Write combined read_bytes + write_bytes from /proc/1/io for I/O throughput monitoring
+    IO_BYTES=$(awk '/^(read_bytes|write_bytes):/{s+=$2} END{print s+0}' /proc/1/io 2>/dev/null || echo "-1")
+    echo "$IO_BYTES" > /shared/validator_io_bytes
+    # Write count of unexpected file descriptor types
+    UNEXPECTED_FDS=0
+    for link in /proc/1/fd/*; do
+        target=$(readlink "$link" 2>/dev/null || continue)
+        case "$target" in
+            /var/*|/tmp/*|/shared/*|/opt/*|/etc/*|/usr/*|/run/*) ;; # regular files
+            socket:*|pipe:*) ;; # expected IPC
+            /dev/null|/dev/urandom|/dev/random|/dev/zero) ;; # expected devices
+            anon_inode:*) ;; # epoll, eventfd, timerfd
+            /proc/*) ;; # proc filesystem
+            *) UNEXPECTED_FDS=$((UNEXPECTED_FDS + 1)) ;;
+        esac
+    done
+    echo "$UNEXPECTED_FDS" > /shared/validator_unexpected_fds
 
     # Refresh heartbeat before slow filesystem operations
     date +%s > /shared/validator_heartbeat
