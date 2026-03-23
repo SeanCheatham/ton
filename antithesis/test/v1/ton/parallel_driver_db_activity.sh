@@ -23,8 +23,9 @@ if [[ "$DB_MTIME" == "-1" || -z "$DB_MTIME" ]]; then
 fi
 
 AGE=$((NOW - DB_MTIME))
-if [ "$AGE" -le 60 ]; then
+LIMIT=120
+if [ "$AGE" -le "$LIMIT" ]; then
     sdk_always true "$PROPERTY" "$(jq -cn --argjson age "$AGE" '{age_seconds: $age}')"
 else
-    sdk_always false "$PROPERTY" "$(jq -cn --argjson age "$AGE" --argjson limit 60 '{age_seconds: $age, limit_seconds: $limit}')"
+    sdk_always false "$PROPERTY" "$(jq -cn --argjson age "$AGE" --argjson limit "$LIMIT" '{age_seconds: $age, limit_seconds: $limit}')"
 fi

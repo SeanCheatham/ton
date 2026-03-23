@@ -78,6 +78,12 @@ echo "Starting heartbeat writer..."
 (
 set +e
 set +o pipefail
+# Track whether we've ever seen UDP/TCP ports bound.
+# Until confirmed bound at least once, we don't write "0" — prevents
+# false violations during startup when validator-engine is running but
+# hasn't finished binding ports yet.
+_UDP_EVER_BOUND=false
+_TCP_EVER_BOUND=false
 while true; do
     date +%s > /shared/validator_heartbeat
     # Write DB directory size (bytes) for data-integrity monitoring
@@ -97,7 +103,7 @@ while true; do
     echo "$SOCK_COUNT" > /shared/validator_sock_count
     # Write RocksDB LOCK file existence for DB integrity monitoring
     # RocksDB may place the LOCK file in a subdirectory (e.g., /var/ton-work/db/celldb/LOCK)
-    LOCK_COUNT=$(find /var/ton-work/db -name LOCK -type f 2>/dev/null | head -1 | wc -l)
+    LOCK_COUNT=$(find /var/ton-work/db -maxdepth 2 -name LOCK -type f 2>/dev/null | head -1 | wc -l)
     if [ "$LOCK_COUNT" -gt 0 ]; then
         echo "1" > /shared/validator_db_lock
     else
@@ -114,7 +120,9 @@ while true; do
         echo "-1" > /shared/validator_config_valid
     fi
     # Write most recent DB file modification time for activity monitoring
-    DB_MTIME=$(find /var/ton-work/db -type f -printf '%T@\n' 2>/dev/null | sort -rn | head -1 | cut -d. -f1)
+    # Use -maxdepth 2 to avoid expensive full-tree traversal on large DBs.
+    # Use sort -rn | head -1 but limit to top-level and one sublevel.
+    DB_MTIME=$(find /var/ton-work/db -maxdepth 2 -type f -printf '%T@\n' 2>/dev/null | sort -rn | head -1 | cut -d. -f1)
     echo "${DB_MTIME:--1}" > /shared/validator_db_mtime
     # Write cumulative CPU time (user + system ticks) for activity monitoring
     CPU_TICKS=$(awk '{print $14 + $15}' /proc/1/stat 2>/dev/null || echo "-1")
@@ -124,11 +132,18 @@ while true; do
     echo "$PROC_STATE" > /shared/validator_proc_state
     # Write UDP socket bound status for port 30001 (0x7531 in hex)
     # Only write once the validator process is PID 1 (after exec); before that,
-    # PID 1 is bash and the UDP socket won't be bound yet — writing "0" would
-    # cause a false violation if the workload reads the stale value.
+    # PID 1 is bash and the UDP socket won't be bound yet.
+    # Additionally, don't write "0" until we've seen the port bound at least once,
+    # to avoid false violations during the brief startup window where validator-engine
+    # is running but hasn't finished binding the UDP socket yet.
     if grep -q validator-engine /proc/1/cmdline 2>/dev/null; then
         UDP_BOUND=$(awk '$2 ~ /:7531$/ {found=1} END {print found+0}' /proc/1/net/udp 2>/dev/null || echo "-1")
-        echo "$UDP_BOUND" > /shared/validator_udp_bound
+        if [ "$UDP_BOUND" = "1" ]; then
+            _UDP_EVER_BOUND=true
+            echo "1" > /shared/validator_udp_bound
+        elif [ "$_UDP_EVER_BOUND" = "true" ]; then
+            echo "0" > /shared/validator_udp_bound
+        fi
     fi
     # Write RocksDB WAL (.log) file count for compaction health monitoring
     WAL_COUNT=$(find /var/ton-work/db -maxdepth 2 -name "*.log" -type f 2>/dev/null | wc -l)
@@ -145,11 +160,14 @@ while true; do
     # Write TCP control ports bound status (30002=0x7532, 30003=0x7533)
     # Only write once the validator process is PID 1 (after exec) to avoid stale "0"
     # Match any local IP (validator may bind to 127.0.0.1 not 0.0.0.0)
+    # Don't write "0" until we've confirmed both ports were bound at least once,
+    # to avoid false violations during startup.
     if grep -q validator-engine /proc/1/cmdline 2>/dev/null; then
         TCP_PORTS=$(cat /proc/1/net/tcp 2>/dev/null)
         if echo "$TCP_PORTS" | grep -qi ":7532 .*0A" && echo "$TCP_PORTS" | grep -qi ":7533 .*0A"; then
+            _TCP_EVER_BOUND=true
             echo 1 > /shared/validator_tcp_bound
-        else
+        elif [ "$_TCP_EVER_BOUND" = "true" ]; then
             echo 0 > /shared/validator_tcp_bound
         fi
     fi
@@ -207,12 +225,17 @@ while true; do
     SWAP_KB=$(awk '/VmSwap/{print $2}' /proc/1/status 2>/dev/null || echo "-1")
     echo "$SWAP_KB" > /shared/validator_swap_kb
     # Write RocksDB SST file count for data integrity monitoring
-    SST_COUNT=$(find /var/ton-work/db -name "*.sst" -type f 2>/dev/null | wc -l)
+    SST_COUNT=$(find /var/ton-work/db -maxdepth 2 -name "*.sst" -type f 2>/dev/null | wc -l)
     echo "$SST_COUNT" > /shared/validator_sst_count
     # Write voluntary + nonvoluntary context switches for scheduling health monitoring
     VOL_CS=$(awk '/^voluntary_ctxt_switches:/{print $2}' /proc/1/status 2>/dev/null || echo "-1")
     NONVOL_CS=$(awk '/^nonvoluntary_ctxt_switches:/{print $2}' /proc/1/status 2>/dev/null || echo "-1")
     echo "${VOL_CS}:${NONVOL_CS}" > /shared/validator_ctxt_switches
+    # Write heartbeat again at end of loop to keep it fresh even when
+    # the metric collection above takes a long time (many find/du operations).
+    # Without this, the heartbeat can become stale if operations take >40s,
+    # causing "heartbeat is fresh" assertions to fail.
+    date +%s > /shared/validator_heartbeat
     sleep 5
 done
 ) &
