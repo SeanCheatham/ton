@@ -115,8 +115,13 @@ while true; do
     PROC_STATE=$(awk '/^State:/{print $2}' /proc/1/status 2>/dev/null || echo "?")
     echo "$PROC_STATE" > /shared/validator_proc_state
     # Write UDP socket bound status for port 30001 (0x7531 in hex)
-    UDP_BOUND=$(awk '$2 ~ /:7531$/ {found=1} END {print found+0}' /proc/1/net/udp 2>/dev/null || echo "-1")
-    echo "$UDP_BOUND" > /shared/validator_udp_bound
+    # Only write once the validator process is PID 1 (after exec); before that,
+    # PID 1 is bash and the UDP socket won't be bound yet — writing "0" would
+    # cause a false violation if the workload reads the stale value.
+    if grep -q validator-engine /proc/1/cmdline 2>/dev/null; then
+        UDP_BOUND=$(awk '$2 ~ /:7531$/ {found=1} END {print found+0}' /proc/1/net/udp 2>/dev/null || echo "-1")
+        echo "$UDP_BOUND" > /shared/validator_udp_bound
+    fi
     # Write RocksDB WAL (.log) file count for compaction health monitoring
     WAL_COUNT=$(find /var/ton-work/db -maxdepth 2 -name "*.log" -type f 2>/dev/null | wc -l)
     echo "$WAL_COUNT" > /shared/validator_wal_count
@@ -130,11 +135,14 @@ while true; do
     MANIFEST_COUNT=$(find /var/ton-work/db -maxdepth 2 -name "MANIFEST-*" -type f 2>/dev/null | wc -l)
     echo "$MANIFEST_COUNT" > /shared/validator_manifest_count
     # Write TCP control ports bound status (30002=0x7532, 30003=0x7533)
-    TCP_PORTS=$(cat /proc/1/net/tcp 2>/dev/null)
-    if echo "$TCP_PORTS" | grep -qi "00000000:7532.*0A" && echo "$TCP_PORTS" | grep -qi "00000000:7533.*0A"; then
-        echo 1 > /shared/validator_tcp_bound
-    else
-        echo 0 > /shared/validator_tcp_bound
+    # Only write once the validator process is PID 1 (after exec) to avoid stale "0"
+    if grep -q validator-engine /proc/1/cmdline 2>/dev/null; then
+        TCP_PORTS=$(cat /proc/1/net/tcp 2>/dev/null)
+        if echo "$TCP_PORTS" | grep -qi "00000000:7532.*0A" && echo "$TCP_PORTS" | grep -qi "00000000:7533.*0A"; then
+            echo 1 > /shared/validator_tcp_bound
+        else
+            echo 0 > /shared/validator_tcp_bound
+        fi
     fi
     # Write RocksDB CURRENT file validity (root of metadata chain: CURRENT → MANIFEST → SST)
     CURRENT_FILE=$(find /var/ton-work/db -maxdepth 2 -name CURRENT -type f 2>/dev/null | head -1)
