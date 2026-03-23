@@ -16,6 +16,8 @@ HEARTBEAT_MAX_AGE=60
 
 IDENTITY_FILE="/shared/validator_rocksdb_identity"
 FIRST_FILE="/shared/validator_rocksdb_identity_first"
+STARTUP_FILE="/shared/validator_startup_id"
+STARTUP_SNAP="/shared/validator_rocksdb_identity_startup"
 HEARTBEAT_FILE="/shared/validator_heartbeat"
 
 ASSERTION_NAME="RocksDB IDENTITY file is stable when validator is healthy"
@@ -49,17 +51,34 @@ if [[ ! -f "$IDENTITY_FILE" ]]; then
 fi
 
 current_identity=$(cat "$IDENTITY_FILE" 2>/dev/null | tr -d '[:space:]')
-if [[ -z "$current_identity" ]]; then
-    echo "SKIP: RocksDB identity file is empty"
+if [[ -z "$current_identity" ]] || [[ "$current_identity" == "unknown" ]]; then
+    echo "SKIP: RocksDB identity not yet available"
     exit 0
 fi
 
 echo "  Current RocksDB identity: ${current_identity}"
 
+# Detect container restarts via startup generation marker.
+# If the validator restarted, RocksDB legitimately creates a new IDENTITY.
+# Reset the baseline when we detect a new startup generation.
+current_startup=$(cat "$STARTUP_FILE" 2>/dev/null | tr -d '[:space:]')
+saved_startup=$(cat "$STARTUP_SNAP" 2>/dev/null | tr -d '[:space:]')
+
+if [[ -n "$current_startup" ]] && [[ "$current_startup" != "$saved_startup" ]]; then
+    echo "  New validator lifecycle detected (startup=$current_startup), resetting baseline"
+    echo "$current_identity" > "$FIRST_FILE"
+    echo "$current_startup" > "$STARTUP_SNAP"
+    sdk_always true "${ASSERTION_NAME}" \
+        "$(jq -cn --arg id "$current_identity" --arg startup "$current_startup" \
+            '{new_lifecycle: true, identity: $id, startup_id: $startup}')"
+    exit 0
+fi
+
 # Step 4: First observation — store and pass
 if [[ ! -f "$FIRST_FILE" ]]; then
     echo "  First observation, storing identity"
     echo "$current_identity" > "$FIRST_FILE"
+    [[ -n "$current_startup" ]] && echo "$current_startup" > "$STARTUP_SNAP"
     sdk_always true "${ASSERTION_NAME}" \
         "$(jq -cn --arg id "$current_identity" '{first_observation: true, identity: $id}')"
     exit 0

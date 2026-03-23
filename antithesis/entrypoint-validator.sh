@@ -129,7 +129,7 @@ echo "0:0" > /shared/validator_rss_history
 echo "0:0" > /shared/validator_fd_history
 echo "1" > /shared/validator_db_perms
 echo "0" > /shared/validator_zombie_count
-echo "0" > /shared/validator_db_structure
+echo "-1" > /shared/validator_db_structure
 echo "0" > /shared/validator_keyring_count
 echo "unknown" > /shared/validator_cmdline_hash
 echo "0" > /shared/validator_db_dir_count
@@ -137,6 +137,9 @@ echo "unknown" > /shared/validator_rocksdb_identity
 echo "0" > /shared/validator_manifest_size
 echo "0" > /shared/validator_compaction_count
 echo "0:0" > /shared/validator_thread_history
+# Write a unique startup generation ID so drivers can detect container restarts
+# and reset their cross-invocation state (e.g., first-observed IDENTITY).
+date +%s%N > /shared/validator_startup_id
 while true; do
     date +%s > /shared/validator_heartbeat
 
@@ -297,8 +300,11 @@ while true; do
     # as separate top-level directories — those are internal RocksDB column families.
     # We check: keyring (crypto keys) + the DB root has a config.json (validator config)
     # + at least one RocksDB metadata file (CURRENT or MANIFEST-*).
+    # RocksDB metadata may be in the root DB dir OR in subdirectories (celldb/, etc.),
+    # so search up to maxdepth 2 to catch both layouts.
     if [ -d /var/ton-work/db/keyring ] && [ -f /var/ton-work/db/config.json ] && \
-       { [ -f /var/ton-work/db/CURRENT ] || ls /var/ton-work/db/MANIFEST-* >/dev/null 2>&1; }; then
+       { [ -f /var/ton-work/db/CURRENT ] || ls /var/ton-work/db/MANIFEST-* >/dev/null 2>&1 || \
+         find /var/ton-work/db -maxdepth 2 -name CURRENT -type f 2>/dev/null | head -1 | grep -q .; }; then
         echo "1" > /shared/validator_db_structure
     else
         echo "0" > /shared/validator_db_structure

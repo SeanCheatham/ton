@@ -51,11 +51,21 @@ for f in /shared/validator_*; do
     #   to equal the full loop duration rather than measuring metric staleness.
     # - validator_rss_history, validator_fd_history, validator_thread_history:
     #   append-mode files with tail/mv that can have slightly different mtime patterns.
+    # - Driver-written state files: these are written by workload drivers at
+    #   unpredictable times, not by the heartbeat loop, so their mtimes can
+    #   be arbitrarily stale relative to heartbeat-loop metrics.
+    # - validator_startup_id: written once at container startup, never updated.
     case "$(basename "$f")" in
         validator_transitions) continue ;;
         validator_heartbeat) continue ;;
         validator_rss_history|validator_fd_history|validator_thread_history) continue ;;
         validator_rss_history.tmp|validator_fd_history.tmp|validator_thread_history.tmp) continue ;;
+        validator_rocksdb_identity_first|validator_rocksdb_identity_startup) continue ;;
+        validator_last_up|validator_prev_state) continue ;;
+        validator_io_ticks_prev|validator_cpu_ticks_prev) continue ;;
+        validator_heartbeat_prev|validator_log_size_prev) continue ;;
+        validator_db_dir_prev|validator_cmdline_first) continue ;;
+        validator_startup_id) continue ;;
     esac
     MTIME=$(stat -c %Y "$f" 2>/dev/null || continue)
     FILE_COUNT=$((FILE_COUNT + 1))
