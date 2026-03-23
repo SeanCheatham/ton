@@ -55,6 +55,8 @@ sdk_catalog_always "Validator downtime is bounded after initial startup"
 sdk_catalog_always "Console port accepts and holds TCP connection"
 sdk_catalog_always "Validator does not crash-loop or oscillate rapidly"
 sdk_catalog_always "Validator database exists and grows when healthy"
+sdk_catalog_always "Liteserver port accepts and holds TCP connection"
+sdk_catalog_always "Validator heartbeat timestamp is monotonically non-decreasing"
 echo "Assertion catalog emitted."
 
 # Signal that setup is complete
