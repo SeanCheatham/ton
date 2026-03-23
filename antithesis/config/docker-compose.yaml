@@ -7,7 +7,7 @@ services:
       context: ../..
       dockerfile: antithesis/Dockerfile
       target: validator
-    image: validator:latest
+    image: ton-validator:latest
     environment:
       - VALIDATOR_PORT=30001
       - CONSOLE_PORT=30002
@@ -25,14 +25,12 @@ services:
       context: ../..
       dockerfile: antithesis/Dockerfile
       target: workload
-    image: workload:latest
+    image: ton-workload:latest
     environment:
       - VALIDATOR_HOST=validator
       - VALIDATOR_PORT=30001
       - CONSOLE_PORT=30002
       - LITE_PORT=30003
-    depends_on:
-      - validator
     volumes:
       - shared:/shared
 

@@ -438,14 +438,16 @@ while true; do
     ROCKSDB_LOG=$(find /var/ton-work/db -maxdepth 2 -name "LOG" -type f 2>/dev/null | head -5)
     CORRUPTION_COUNT=0
     for logf in $ROCKSDB_LOG; do
-        COUNT=$(grep -ciE "Corruption:|IO error|checksum mismatch|bad block contents|Repair" "$logf" 2>/dev/null || echo "0")
+        COUNT=$(grep -ciE "Corruption:|IO error|checksum mismatch|bad block contents|Repair" "$logf" 2>/dev/null) || true
+        COUNT=${COUNT:-0}
         CORRUPTION_COUNT=$((CORRUPTION_COUNT + COUNT))
     done
     echo "$CORRUPTION_COUNT" > /shared/validator_rocksdb_errors
     # Write RocksDB compaction event count for compaction health monitoring
     COMPACTION_COUNT=0
     for logf in $ROCKSDB_LOG; do
-        COUNT=$(grep -ciE "compacted to:|Compaction.*@|Manual compaction" "$logf" 2>/dev/null || echo "0")
+        COUNT=$(grep -ciE "compacted to:|Compaction.*@|Manual compaction" "$logf" 2>/dev/null) || true
+        COUNT=${COUNT:-0}
         COMPACTION_COUNT=$((COMPACTION_COUNT + COUNT))
     done
     echo "$COMPACTION_COUNT" > /shared/validator_compaction_count
