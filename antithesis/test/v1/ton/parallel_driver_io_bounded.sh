@@ -33,7 +33,7 @@ fi
 DELTA=$((CURRENT - PREV))
 
 if [ "$DELTA" -le "$IO_DELTA_LIMIT" ]; then
-    sdk_always true "$PROPERTY" "IO delta $DELTA within bounds (${PREV} -> ${CURRENT})"
+    sdk_always true "$PROPERTY" "$(jq -cn --argjson delta "$DELTA" --argjson limit "$IO_DELTA_LIMIT" --argjson prev "$PREV" --argjson cur "$CURRENT" '{io_delta: $delta, limit: $limit, prev: $prev, current: $cur}')"
 else
-    sdk_always false "$PROPERTY" "IO delta $DELTA exceeds threshold $IO_DELTA_LIMIT (${PREV} -> ${CURRENT})"
+    sdk_always false "$PROPERTY" "$(jq -cn --argjson delta "$DELTA" --argjson limit "$IO_DELTA_LIMIT" --argjson prev "$PREV" --argjson cur "$CURRENT" '{io_delta: $delta, limit: $limit, prev: $prev, current: $cur}')"
 fi

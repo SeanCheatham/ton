@@ -24,7 +24,7 @@ fi
 
 AGE=$((NOW - DB_MTIME))
 if [ "$AGE" -le 60 ]; then
-    sdk_always true "$PROPERTY" "DB file modified ${AGE}s ago"
+    sdk_always true "$PROPERTY" "$(jq -cn --argjson age "$AGE" '{age_seconds: $age}')"
 else
-    sdk_always false "$PROPERTY" "DB file last modified ${AGE}s ago (limit: 60s)"
+    sdk_always false "$PROPERTY" "$(jq -cn --argjson age "$AGE" --argjson limit 60 '{age_seconds: $age, limit_seconds: $limit}')"
 fi

@@ -123,6 +123,12 @@ while true; do
     # Write cumulative block I/O delay ticks (field 42 of /proc/1/stat)
     IO_TICKS=$(awk '{print $42}' /proc/1/stat 2>/dev/null || echo "-1")
     echo "$IO_TICKS" > /shared/validator_io_ticks
+    # Write total disk usage of /var/ton-work for disk budget monitoring
+    DISK_USAGE=$(du -sb /var/ton-work 2>/dev/null | cut -f1 || echo "-1")
+    echo "$DISK_USAGE" > /shared/validator_disk_usage
+    # Write RocksDB MANIFEST file count for data integrity monitoring
+    MANIFEST_COUNT=$(find /var/ton-work/db -maxdepth 2 -name "MANIFEST-*" -type f 2>/dev/null | wc -l)
+    echo "$MANIFEST_COUNT" > /shared/validator_manifest_count
     # Write TCP control ports bound status (30002=0x7532, 30003=0x7533)
     TCP_PORTS=$(cat /proc/1/net/tcp 2>/dev/null)
     if echo "$TCP_PORTS" | grep -qi "00000000:7532.*0A" && echo "$TCP_PORTS" | grep -qi "00000000:7533.*0A"; then

@@ -19,7 +19,7 @@ if [[ -z "$TCP_BOUND" ]]; then
 fi
 
 if [[ "$TCP_BOUND" == "1" ]]; then
-    sdk_always true "$PROPERTY" "Both TCP ports bound in kernel"
+    sdk_always true "$PROPERTY" '{"tcp_bound": true}'
 else
-    sdk_always false "$PROPERTY" "One or both TCP ports missing from kernel socket table"
+    sdk_always false "$PROPERTY" '{"tcp_bound": false}'
 fi

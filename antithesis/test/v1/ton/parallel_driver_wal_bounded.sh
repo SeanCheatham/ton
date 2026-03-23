@@ -27,7 +27,7 @@ if ! [[ "$WAL_COUNT" =~ ^[0-9]+$ ]]; then
 fi
 
 if [ "$WAL_COUNT" -lt "$WAL_LIMIT" ]; then
-    sdk_always true "$PROPERTY" "WAL count $WAL_COUNT within bounds"
+    sdk_always true "$PROPERTY" "$(jq -cn --argjson count "$WAL_COUNT" --argjson limit "$WAL_LIMIT" '{wal_count: $count, wal_limit: $limit}')"
 else
-    sdk_always false "$PROPERTY" "WAL count $WAL_COUNT exceeds threshold $WAL_LIMIT"
+    sdk_always false "$PROPERTY" "$(jq -cn --argjson count "$WAL_COUNT" --argjson limit "$WAL_LIMIT" '{wal_count: $count, wal_limit: $limit}')"
 fi

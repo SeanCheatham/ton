@@ -31,7 +31,8 @@ fi
 
 if [ "$CURRENT" -gt "$PREV" ]; then
     DELTA=$((CURRENT - PREV))
-    sdk_always true "$PROPERTY" "CPU ticks advanced by $DELTA (${PREV} -> ${CURRENT})"
+    sdk_always true "$PROPERTY" "$(jq -cn --argjson delta "$DELTA" --argjson prev "$PREV" --argjson cur "$CURRENT" '{delta: $delta, prev: $prev, current: $cur}')"
 else
-    sdk_always false "$PROPERTY" "CPU ticks stalled at $CURRENT (prev: $PREV)"
+    DELTA=0
+    sdk_always false "$PROPERTY" "$(jq -cn --argjson cur "$CURRENT" --argjson prev "$PREV" '{delta: 0, prev: $prev, current: $cur, stalled: true}')"
 fi
