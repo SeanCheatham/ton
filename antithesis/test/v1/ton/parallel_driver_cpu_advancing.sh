@@ -31,7 +31,7 @@ fi
 
 if [ "$CURRENT" -gt "$PREV" ]; then
     DELTA=$((CURRENT - PREV))
-    sdk_always "$PROPERTY" true "CPU ticks advanced by $DELTA (${PREV} -> ${CURRENT})"
+    sdk_always true "$PROPERTY" "CPU ticks advanced by $DELTA (${PREV} -> ${CURRENT})"
 else
-    sdk_always "$PROPERTY" false "CPU ticks stalled at $CURRENT (prev: $PREV)"
+    sdk_always false "$PROPERTY" "CPU ticks stalled at $CURRENT (prev: $PREV)"
 fi

@@ -66,6 +66,8 @@ sdk_catalog_always "RocksDB LOCK file exists when validator is healthy"
 sdk_catalog_always "Validator config file remains valid JSON"
 sdk_catalog_always "Validator is actively modifying database files"
 sdk_catalog_always "Validator CPU time is advancing when healthy"
+sdk_catalog_always "Validator process state is runnable"
+sdk_catalog_always "Validator UDP socket is bound when healthy"
 echo "Assertion catalog emitted."
 
 # Signal that setup is complete

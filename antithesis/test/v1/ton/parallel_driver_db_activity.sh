@@ -24,7 +24,7 @@ fi
 
 AGE=$((NOW - DB_MTIME))
 if [ "$AGE" -le 60 ]; then
-    sdk_always "$PROPERTY" true "DB file modified ${AGE}s ago"
+    sdk_always true "$PROPERTY" "DB file modified ${AGE}s ago"
 else
-    sdk_always "$PROPERTY" false "DB file last modified ${AGE}s ago (limit: 60s)"
+    sdk_always false "$PROPERTY" "DB file last modified ${AGE}s ago (limit: 60s)"
 fi

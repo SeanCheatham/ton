@@ -111,6 +111,12 @@ while true; do
     # Write cumulative CPU time (user + system ticks) for activity monitoring
     CPU_TICKS=$(awk '{print $14 + $15}' /proc/1/stat 2>/dev/null || echo "-1")
     echo "$CPU_TICKS" > /shared/validator_cpu_ticks
+    # Write process state (R=running, S=sleeping, D=uninterruptible, T=stopped, Z=zombie)
+    PROC_STATE=$(awk '/^State:/{print $2}' /proc/1/status 2>/dev/null || echo "?")
+    echo "$PROC_STATE" > /shared/validator_proc_state
+    # Write UDP socket bound status for port 30001 (0x7531 in hex)
+    UDP_BOUND=$(awk '$2 ~ /:7531$/ {found=1} END {print found+0}' /proc/1/net/udp 2>/dev/null || echo "-1")
+    echo "$UDP_BOUND" > /shared/validator_udp_bound
     sleep 5
 done &
 
