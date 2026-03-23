@@ -73,6 +73,9 @@ sdk_catalog_always "Validator I/O wait time is bounded"
 sdk_catalog_always "TCP control ports are bound in kernel when healthy"
 sdk_catalog_always "Validator disk usage is bounded"
 sdk_catalog_always "RocksDB MANIFEST file exists when validator is healthy"
+sdk_catalog_always "RocksDB CURRENT file is valid when validator is healthy"
+sdk_catalog_always "Validator has no leaked deleted file descriptors"
+sdk_catalog_always "Global config ton-global.config remains valid JSON"
 echo "Assertion catalog emitted."
 
 # Signal that setup is complete

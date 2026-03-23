@@ -136,6 +136,26 @@ while true; do
     else
         echo 0 > /shared/validator_tcp_bound
     fi
+    # Write RocksDB CURRENT file validity (root of metadata chain: CURRENT → MANIFEST → SST)
+    CURRENT_FILE=$(find /var/ton-work/db -maxdepth 2 -name CURRENT -type f 2>/dev/null | head -1)
+    if [ -n "$CURRENT_FILE" ] && [ -s "$CURRENT_FILE" ]; then
+        echo "1" > /shared/validator_current_valid
+    else
+        echo "0" > /shared/validator_current_valid
+    fi
+    # Write count of leaked deleted file descriptors
+    DELETED_FDS=$(ls -la /proc/1/fd 2>/dev/null | grep -c '(deleted)' || echo "0")
+    echo "$DELETED_FDS" > /shared/validator_deleted_fds
+    # Write ton-global.config JSON validity
+    if [ -f "/var/ton-work/db/ton-global.config" ]; then
+        if jq empty /var/ton-work/db/ton-global.config 2>/dev/null; then
+            echo "1" > /shared/validator_global_config_valid
+        else
+            echo "0" > /shared/validator_global_config_valid
+        fi
+    else
+        echo "-1" > /shared/validator_global_config_valid
+    fi
     sleep 5
 done &
 
