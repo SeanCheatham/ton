@@ -21,7 +21,7 @@ if [[ -z "$HB_TS" ]] || ! [[ "$HB_TS" =~ ^[0-9]+$ ]] || [ $((NOW - HB_TS)) -gt 3
 fi
 
 TCP_BOUND=$(cat /shared/validator_tcp_bound 2>/dev/null || echo "")
-if [[ -z "$TCP_BOUND" ]]; then
+if [[ -z "$TCP_BOUND" || "$TCP_BOUND" == "-1" ]]; then
     exit 0
 fi
 

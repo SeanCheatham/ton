@@ -85,6 +85,10 @@ set +o pipefail
 _UDP_EVER_BOUND=false
 _TCP_EVER_BOUND=false
 _FIRST_HEARTBEAT=true
+# Initialize conditional metric files so they always exist for the metrics_complete assertion.
+# Consuming drivers treat "-1" as "not yet checked" and skip gracefully.
+echo "-1" > /shared/validator_tcp_bound
+echo "-1" > /shared/validator_udp_bound
 while true; do
     date +%s > /shared/validator_heartbeat
 
@@ -251,6 +255,8 @@ while true; do
     # Write DB directory size (bytes) for data-integrity monitoring
     if [ -d "/var/ton-work/db" ]; then
         du -sb /var/ton-work/db 2>/dev/null | cut -f1 > /shared/validator_db_size
+    else
+        echo "0" > /shared/validator_db_size
     fi
     # Write RocksDB LOCK file existence for DB integrity monitoring
     LOCK_COUNT=$(find /var/ton-work/db -maxdepth 2 -name LOCK -type f 2>/dev/null | head -1 | wc -l)
@@ -272,6 +278,8 @@ while true; do
     # Write config.json structural keys for structural integrity monitoring
     if [ -f "/var/ton-work/db/config.json" ]; then
         jq -r 'keys | join(",")' /var/ton-work/db/config.json > /shared/validator_config_keys 2>/dev/null || echo "error" > /shared/validator_config_keys
+    else
+        echo "missing" > /shared/validator_config_keys
     fi
     # Write TCP connection state counts (CLOSE_WAIT=08, TIME_WAIT=06 in hex)
     CLOSE_WAIT=$(awk '$4 == "08" {count++} END {print count+0}' /proc/1/net/tcp 2>/dev/null || echo "0")
