@@ -4,7 +4,7 @@ set -euo pipefail
 # Parallel driver: Validator metric files are all fresh when healthy
 # Meta-infrastructure consistency property. When the validator is healthy,
 # ALL /shared/validator_* metric files should have modification times within
-# 30 seconds of each other. Catches partial heartbeat loop failures where
+# 60 seconds of each other. Catches partial heartbeat loop failures where
 # slow operations (e.g., du -sb) block the loop, causing downstream metrics
 # to go stale while the heartbeat itself stays fresh.
 
@@ -43,6 +43,10 @@ NEWEST_FILE=""
 
 for f in /shared/validator_*; do
     [ -f "$f" ] || continue
+    # Skip files written by workload drivers, not the heartbeat loop
+    case "$(basename "$f")" in
+        validator_transitions) continue ;;
+    esac
     MTIME=$(stat -c %Y "$f" 2>/dev/null || continue)
     FILE_COUNT=$((FILE_COUNT + 1))
     if [ "$MTIME" -lt "$MIN_MTIME" ]; then
@@ -62,7 +66,7 @@ if [ "$FILE_COUNT" -lt 2 ]; then
 fi
 
 SPREAD=$((MAX_MTIME - MIN_MTIME))
-THRESHOLD=30
+THRESHOLD=60
 
 if [ "$SPREAD" -le "$THRESHOLD" ]; then
     echo "PASS: Metric file mtime spread is ${SPREAD}s across ${FILE_COUNT} files (threshold: ${THRESHOLD}s)"

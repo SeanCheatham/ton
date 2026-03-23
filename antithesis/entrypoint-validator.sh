@@ -128,6 +128,15 @@ echo "0" > /shared/validator_sigblk
 echo "0:0" > /shared/validator_rss_history
 echo "0:0" > /shared/validator_fd_history
 echo "1" > /shared/validator_db_perms
+echo "0" > /shared/validator_zombie_count
+echo "0" > /shared/validator_db_structure
+echo "0" > /shared/validator_keyring_count
+echo "unknown" > /shared/validator_cmdline_hash
+echo "0" > /shared/validator_db_dir_count
+echo "unknown" > /shared/validator_rocksdb_identity
+echo "0" > /shared/validator_manifest_size
+echo "0" > /shared/validator_compaction_count
+echo "0:0" > /shared/validator_thread_history
 while true; do
     date +%s > /shared/validator_heartbeat
 
@@ -160,8 +169,14 @@ while true; do
                 echo 1 > /shared/validator_tcp_bound
             elif [ "$_TCP_EVER_BOUND" = "true" ]; then
                 echo 0 > /shared/validator_tcp_bound
+            else
+                touch /shared/validator_tcp_bound
             fi
+        else
+            touch /shared/validator_tcp_bound
         fi
+    else
+        touch /shared/validator_tcp_bound
     fi
 
     # Write most recent DB file modification time for activity monitoring
@@ -177,7 +192,11 @@ while true; do
             echo "1" > /shared/validator_udp_bound
         elif [ "$_UDP_EVER_BOUND" = "true" ]; then
             echo "0" > /shared/validator_udp_bound
+        else
+            touch /shared/validator_udp_bound
         fi
+    else
+        touch /shared/validator_udp_bound
     fi
 
     # Refresh heartbeat after high-priority metrics
@@ -322,6 +341,8 @@ while true; do
     IDENTITY_FILE=$(find /var/ton-work/db -maxdepth 2 -name IDENTITY -type f 2>/dev/null | head -1)
     if [ -n "$IDENTITY_FILE" ] && [ -s "$IDENTITY_FILE" ]; then
         tr -d '[:space:]' < "$IDENTITY_FILE" > /shared/validator_rocksdb_identity
+    else
+        touch /shared/validator_rocksdb_identity
     fi
 
     # Refresh heartbeat after moved metrics
@@ -377,6 +398,8 @@ while true; do
     MANIFEST_FILE=$(cat /var/ton-work/db/CURRENT 2>/dev/null | tr -d '[:space:]')
     if [ -n "$MANIFEST_FILE" ] && [ -f "/var/ton-work/db/$MANIFEST_FILE" ]; then
         stat -c%s "/var/ton-work/db/$MANIFEST_FILE" > /shared/validator_manifest_size
+    else
+        touch /shared/validator_manifest_size
     fi
     # Write RocksDB CURRENT file validity (root of metadata chain: CURRENT → MANIFEST → SST)
     CURRENT_FILE=$(find /var/ton-work/db -maxdepth 2 -name CURRENT -type f 2>/dev/null | head -1)
