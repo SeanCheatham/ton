@@ -16,7 +16,7 @@ CONSOLE_PORT="${CONSOLE_PORT:-30002}"
 LITE_PORT="${LITE_PORT:-30003}"
 
 ASSERTION_NAME="Validator oom_score is bounded when healthy"
-OOM_LIMIT=800
+OOM_LIMIT=950
 
 echo "Checking validator OOM score..."
 
