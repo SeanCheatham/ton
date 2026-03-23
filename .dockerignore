@@ -1,0 +1,12 @@
+.git
+build
+antithesis/config
+*.md
+LICENSE.*
+GPLv2
+LGPLv2
+doc
+lite-client-docs
+lldb_addons.py
+pyproject.toml
+uv.lock

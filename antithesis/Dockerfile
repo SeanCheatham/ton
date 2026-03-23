@@ -36,6 +36,9 @@ WORKDIR /ton
 
 COPY ./ ./
 
+RUN test -f /ton/third-party/openssl/Configure || \
+    (echo "ERROR: submodules not initialized. Run: git submodule update --init --recursive" && exit 1)
+
 RUN --mount=type=cache,target=/ton/build \
     --mount=type=cache,target=/ccache \
     cd /ton/build && \
