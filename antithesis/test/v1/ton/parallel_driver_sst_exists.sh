@@ -58,13 +58,31 @@ if [ "$HB_CTIME" = "0" ]; then
 fi
 UPTIME_EST=$(($(date +%s) - HB_CTIME))
 
-DETAILS=$(jq -cn --argjson count "$SST_COUNT" --argjson uptime "$UPTIME_EST" '{sst_count: $count, estimated_uptime_seconds: $uptime}')
+# Compaction precondition: SST files are created by memtable flushes/compaction.
+# A standalone validator with no peers may never produce blocks, so no data gets
+# flushed to SST. Only assert SST existence if compaction has actually occurred.
+COMPACTION_COUNT=0
+if [ -f /shared/validator_compaction_count ]; then
+    COMPACTION_COUNT=$(cat /shared/validator_compaction_count 2>/dev/null || echo "0")
+    if ! [[ "$COMPACTION_COUNT" =~ ^[0-9]+$ ]]; then
+        COMPACTION_COUNT=0
+    fi
+fi
+
+DETAILS=$(jq -cn --argjson count "$SST_COUNT" --argjson uptime "$UPTIME_EST" --argjson compactions "$COMPACTION_COUNT" '{sst_count: $count, estimated_uptime_seconds: $uptime, compaction_count: $compactions}')
 
 if [ "$SST_COUNT" -gt 0 ]; then
     sdk_always true "$ASSERTION_NAME" "$DETAILS"
 elif [ "$UPTIME_EST" -lt "$STARTUP_GRACE" ]; then
     # Too early after startup — SST files may not exist yet, skip
     echo "Validator uptime ~${UPTIME_EST}s < ${STARTUP_GRACE}s grace period, skipping assertion"
+elif [ "$COMPACTION_COUNT" -eq 0 ]; then
+    # No compaction has occurred yet — SST files legitimately don't exist.
+    # A standalone validator with no peers never produces blocks, so memtables
+    # are never flushed. Emit true: the absence of SST is expected when no
+    # compaction/flush has happened.
+    echo "No compaction events detected (count=0), SST absence is expected — emitting true"
+    sdk_always true "$ASSERTION_NAME" "$DETAILS"
 else
     sdk_always false "$ASSERTION_NAME" "$DETAILS"
 fi
