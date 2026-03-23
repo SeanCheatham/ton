@@ -76,6 +76,9 @@ while true; do
     if [ -d "/var/ton-work/db" ]; then
         du -sb /var/ton-work/db 2>/dev/null | cut -f1 > /shared/validator_db_size
     fi
+    # Write open file descriptor count for resource monitoring
+    FD_COUNT=$(ls /proc/1/fd 2>/dev/null | wc -l || echo "-1")
+    echo "$FD_COUNT" > /shared/validator_fd_count
     sleep 5
 done &
 
@@ -85,4 +88,5 @@ exec validator-engine \
     --db "${DB_ROOT}" \
     --ip "${IP}:${VALIDATOR_PORT}" \
     --threads "${THREADS}" \
-    --verbosity "${VERBOSITY}"
+    --verbosity "${VERBOSITY}" \
+    --logname /shared/validator.log
