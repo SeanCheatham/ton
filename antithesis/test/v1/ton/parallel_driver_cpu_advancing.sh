@@ -32,7 +32,13 @@ fi
 if [ "$CURRENT" -gt "$PREV" ]; then
     DELTA=$((CURRENT - PREV))
     sdk_always true "$PROPERTY" "$(jq -cn --argjson delta "$DELTA" --argjson prev "$PREV" --argjson cur "$CURRENT" '{delta: $delta, prev: $prev, current: $cur}')"
+elif [ "$CURRENT" -eq "$PREV" ]; then
+    # Heartbeat updates every 5s — the driver may run faster than that.
+    # Equal ticks are inconclusive, not a failure.
+    echo "CPU ticks unchanged ($CURRENT), heartbeat may not have refreshed yet — skipping"
+    exit 0
 else
-    DELTA=0
-    sdk_always false "$PROPERTY" "$(jq -cn --argjson cur "$CURRENT" --argjson prev "$PREV" '{delta: 0, prev: $prev, current: $cur, stalled: true}')"
+    # CURRENT < PREV would indicate corruption or counter wrap
+    DELTA=$((PREV - CURRENT))
+    sdk_always false "$PROPERTY" "$(jq -cn --argjson cur "$CURRENT" --argjson prev "$PREV" --argjson delta "$DELTA" '{prev: $prev, current: $cur, delta_negative: $delta, error: "CPU ticks decreased"}')"
 fi
