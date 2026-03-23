@@ -85,10 +85,49 @@ set +o pipefail
 _UDP_EVER_BOUND=false
 _TCP_EVER_BOUND=false
 _FIRST_HEARTBEAT=true
-# Initialize conditional metric files so they always exist for the metrics_complete assertion.
-# Consuming drivers treat "-1" as "not yet checked" and skip gracefully.
+# Initialize ALL expected metric files so they exist for the metrics_complete assertion.
+# The heartbeat is written at the start of each loop iteration, but slow metrics
+# (disk_usage, manifest_count, etc.) are written much later. Without initialization,
+# the metrics_complete driver can see a fresh heartbeat but find files missing on the
+# first iteration. Consuming drivers treat "-1" as "not yet checked" and skip gracefully.
 echo "-1" > /shared/validator_tcp_bound
 echo "-1" > /shared/validator_udp_bound
+echo "-1" > /shared/validator_fd_count
+echo "-1" > /shared/validator_mem_rss
+echo "-1" > /shared/validator_sock_count
+echo "-1" > /shared/validator_cpu_ticks
+echo "?" > /shared/validator_proc_state
+echo "-1" > /shared/validator_io_ticks
+echo "-1" > /shared/validator_thread_count
+echo "-1" > /shared/validator_swap_kb
+echo "-1" > /shared/validator_mem_peak
+echo "0" > /shared/validator_deleted_fds
+echo "-1" > /shared/validator_net_bytes
+echo "-1" > /shared/validator_net_errors
+echo "-1:-1" > /shared/validator_ctxt_switches
+echo "-1" > /shared/validator_oom_score
+echo "-1" > /shared/validator_io_bytes
+echo "0" > /shared/validator_unexpected_fds
+echo "-1" > /shared/validator_db_mtime
+echo "0" > /shared/validator_db_size
+echo "0" > /shared/validator_db_lock
+echo "-1" > /shared/validator_config_valid
+echo "0" > /shared/validator_wal_count
+echo "-1" > /shared/validator_disk_usage
+echo "0" > /shared/validator_manifest_count
+echo "0" > /shared/validator_current_valid
+echo "-1" > /shared/validator_global_config_valid
+echo "0" > /shared/validator_rocksdb_errors
+echo "0" > /shared/validator_sst_count
+echo "-1" > /shared/validator_current_manifest_consistent
+echo "missing" > /shared/validator_config_keys
+echo "0,0" > /shared/validator_tcp_states
+echo "0:0" > /shared/validator_rocksdb_options
+echo "0" > /shared/validator_rocksdb_tmp_files
+echo "0" > /shared/validator_sigblk
+echo "0:0" > /shared/validator_rss_history
+echo "0:0" > /shared/validator_fd_history
+echo "1" > /shared/validator_db_perms
 while true; do
     date +%s > /shared/validator_heartbeat
 
