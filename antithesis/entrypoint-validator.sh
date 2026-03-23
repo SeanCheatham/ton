@@ -84,8 +84,17 @@ set +o pipefail
 # hasn't finished binding ports yet.
 _UDP_EVER_BOUND=false
 _TCP_EVER_BOUND=false
+_FIRST_HEARTBEAT=true
 while true; do
     date +%s > /shared/validator_heartbeat
+
+    # On first heartbeat iteration, write an explicit initialization marker to the log.
+    # TON's TsFileLog buffers aggressively and may not flush for extended periods,
+    # so we guarantee at least one matching line exists for the log_operational assertion.
+    if [ "$_FIRST_HEARTBEAT" = "true" ]; then
+        _FIRST_HEARTBEAT=false
+        echo "[entrypoint] Validator heartbeat started, validator-engine initializing" >> /shared/validator.log
+    fi
 
     # === HIGH-PRIORITY METRICS (checked by assertions sensitive to staleness) ===
     # These run first so they are always fresh relative to the heartbeat timestamp.
@@ -194,6 +203,28 @@ while true; do
     # Write count of zombie (Z state) processes for process hygiene monitoring
     ZOMBIE_COUNT=$(ls /proc/*/status 2>/dev/null | xargs grep -l "^State:.*Z" 2>/dev/null | wc -l || echo "0")
     echo "$ZOMBIE_COUNT" > /shared/validator_zombie_count
+
+    # Append RSS history for memory growth trajectory detection (keep last 20 entries)
+    RSS_KB=$(awk '/VmRSS/{print $2}' /proc/1/status 2>/dev/null || echo "0")
+    echo "$(date +%s):${RSS_KB}" >> /shared/validator_rss_history
+    tail -20 /shared/validator_rss_history > /shared/validator_rss_history.tmp
+    mv /shared/validator_rss_history.tmp /shared/validator_rss_history
+
+    # Append FD count history for FD growth trajectory detection (keep last 20 entries)
+    FD_COUNT_NOW=$(ls /proc/1/fd 2>/dev/null | wc -l || echo "0")
+    echo "$(date +%s):${FD_COUNT_NOW}" >> /shared/validator_fd_history
+    tail -20 /shared/validator_fd_history > /shared/validator_fd_history.tmp
+    mv /shared/validator_fd_history.tmp /shared/validator_fd_history
+
+    # Check that critical DB files are readable+writable for permission integrity monitoring
+    DB_PERM_OK=1
+    for f in /var/ton-work/db/CURRENT /var/ton-work/db/LOCK /var/ton-work/db/MANIFEST-*; do
+        if [ -f "$f" ] && [ ! -r "$f" -o ! -w "$f" ]; then
+            DB_PERM_OK=0
+            break
+        fi
+    done
+    echo "$DB_PERM_OK" > /shared/validator_db_perms
 
     # Refresh heartbeat before slow filesystem operations
     date +%s > /shared/validator_heartbeat

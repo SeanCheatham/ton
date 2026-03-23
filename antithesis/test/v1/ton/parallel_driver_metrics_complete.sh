@@ -89,6 +89,9 @@ EXPECTED_FILES=(
     /shared/validator_rocksdb_options
     /shared/validator_rocksdb_tmp_files
     /shared/validator_sigblk
+    /shared/validator_rss_history
+    /shared/validator_fd_history
+    /shared/validator_db_perms
 )
 
 TOTAL=${#EXPECTED_FILES[@]}

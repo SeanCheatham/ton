@@ -99,6 +99,9 @@ sdk_catalog_always "Validator TCP connections are in expected states when health
 sdk_catalog_always "RocksDB OPTIONS file exists and is non-empty when validator is healthy"
 sdk_catalog_always "Validator has no stale RocksDB temporary files when healthy"
 sdk_catalog_always "Validator critical signals are not blocked when healthy"
+sdk_catalog_always "Validator RSS memory is not monotonically growing"
+sdk_catalog_always "Validator database file permissions are correct when healthy"
+sdk_catalog_always "Validator open FD count is not monotonically growing"
 echo "Assertion catalog emitted."
 
 # Signal that setup is complete
