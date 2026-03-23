@@ -76,6 +76,9 @@ sdk_catalog_always "RocksDB MANIFEST file exists when validator is healthy"
 sdk_catalog_always "RocksDB CURRENT file is valid when validator is healthy"
 sdk_catalog_always "Validator has no leaked deleted file descriptors"
 sdk_catalog_always "Global config ton-global.config remains valid JSON"
+sdk_catalog_always "Validator thread count is bounded"
+sdk_catalog_sometimes "Network bytes transferred is non-zero when healthy"
+sdk_catalog_always "RocksDB SST files exist when validator is healthy"
 echo "Assertion catalog emitted."
 
 # Signal that setup is complete

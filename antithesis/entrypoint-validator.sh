@@ -164,6 +164,15 @@ while true; do
     else
         echo "-1" > /shared/validator_global_config_valid
     fi
+    # Write thread count for resource monitoring
+    THREAD_COUNT=$(awk '/^Threads:/{print $2}' /proc/1/status 2>/dev/null || echo "-1")
+    echo "$THREAD_COUNT" > /shared/validator_thread_count
+    # Sum rx_bytes + tx_bytes across all interfaces (skip lo), fields 2 and 10
+    NET_BYTES=$(awk 'NR>2 && $1 !~ /lo:/ {rx+=$2; tx+=$10} END {print rx+tx}' /proc/1/net/dev 2>/dev/null || echo "-1")
+    echo "$NET_BYTES" > /shared/validator_net_bytes
+    # Write RocksDB SST file count for data integrity monitoring
+    SST_COUNT=$(find /var/ton-work/db -maxdepth 3 -name "*.sst" -type f 2>/dev/null | wc -l)
+    echo "$SST_COUNT" > /shared/validator_sst_count
     sleep 5
 done &
 
