@@ -12,9 +12,10 @@ source "$(dirname "$0")/helper_sdk.sh"
 VALIDATOR_HOST="${VALIDATOR_HOST:-validator}"
 HEARTBEAT_MAX_AGE=60
 ASSERTION_NAME="RocksDB SST files exist when validator is healthy"
-# Grace period: don't assert until validator has been up for at least 60s
-# (SST files may not exist immediately after startup before first memtable flush)
-STARTUP_GRACE=60
+# Grace period: don't assert until validator has been up for at least 180s
+# (SST files may not exist immediately after startup before first memtable flush;
+# standalone validators with no peers take longer to generate enough data)
+STARTUP_GRACE=180
 
 # Use heartbeat-only precondition instead of all-3-ports.
 if [ -f /shared/validator_heartbeat ]; then

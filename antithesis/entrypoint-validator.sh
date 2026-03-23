@@ -352,7 +352,9 @@ while true; do
     done
     echo "$COMPACTION_COUNT" > /shared/validator_compaction_count
     # Write RocksDB SST file count for data integrity monitoring
-    SST_COUNT=$(find /var/ton-work/db -maxdepth 2 -name "*.sst" -type f 2>/dev/null | wc -l)
+    # Search deeper (maxdepth 5) and include both .sst and .ldb extensions
+    # TON uses multiple RocksDB instances in subdirs (celldb/, blockdb/, statedb/)
+    SST_COUNT=$(find /var/ton-work/db -maxdepth 5 \( -name "*.sst" -o -name "*.ldb" \) -type f 2>/dev/null | wc -l)
     echo "$SST_COUNT" > /shared/validator_sst_count
     # Write RocksDB OPTIONS file count and non-empty status for configuration integrity
     OPTIONS_COUNT=$(find "${DB_ROOT}" -maxdepth 2 -name 'OPTIONS-*' -type f 2>/dev/null | head -5 | wc -l)
