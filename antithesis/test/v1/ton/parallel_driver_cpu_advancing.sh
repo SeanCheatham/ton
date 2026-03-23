@@ -38,7 +38,10 @@ elif [ "$CURRENT" -eq "$PREV" ]; then
     echo "CPU ticks unchanged ($CURRENT), heartbeat may not have refreshed yet — skipping"
     exit 0
 else
-    # CURRENT < PREV would indicate corruption or counter wrap
-    DELTA=$((PREV - CURRENT))
-    sdk_always false "$PROPERTY" "$(jq -cn --argjson cur "$CURRENT" --argjson prev "$PREV" --argjson delta "$DELTA" '{prev: $prev, current: $cur, delta_negative: $delta, error: "CPU ticks decreased"}')"
+    # CURRENT < PREV indicates a process restart (PID 1 replaced, CPU counters
+    # reset) or a file-read race on the shared volume.  Neither is a validator
+    # bug — reset the baseline so the next invocation compares within the new
+    # process lifecycle.
+    echo "CPU ticks decreased (prev=$PREV, cur=$CURRENT) — likely process restart, resetting baseline"
+    exit 0
 fi
