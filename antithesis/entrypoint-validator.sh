@@ -353,6 +353,18 @@ while true; do
     TMP_COUNT=$(find "${DB_ROOT}" -maxdepth 3 \( -name '*.tmp' -o -name '*.dbtmp' \) -type f 2>/dev/null | wc -l)
     echo "$TMP_COUNT" > /shared/validator_rocksdb_tmp_files
 
+    # Write md5sum of /proc/1/cmdline for process identity monitoring
+    md5sum /proc/1/cmdline 2>/dev/null | awk '{print $1}' > /shared/validator_cmdline_hash
+
+    # Write RocksDB IDENTITY file content for database identity monitoring
+    IDENTITY_FILE=$(find /var/ton-work/db -maxdepth 2 -name IDENTITY -type f 2>/dev/null | head -1)
+    if [ -n "$IDENTITY_FILE" ] && [ -s "$IDENTITY_FILE" ]; then
+        tr -d '[:space:]' < "$IDENTITY_FILE" > /shared/validator_rocksdb_identity
+    fi
+
+    # Write database subdirectory count for directory structure monitoring
+    find /var/ton-work/db -maxdepth 2 -type d 2>/dev/null | wc -l > /shared/validator_db_dir_count
+
     # Final heartbeat write at end of loop
     date +%s > /shared/validator_heartbeat
     sleep 5
