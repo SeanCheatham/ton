@@ -70,6 +70,14 @@ fi
 # Start background heartbeat writer — writes epoch timestamp to shared volume
 # every 5 seconds so the workload can detect hangs/deadlocks.
 echo "Starting heartbeat writer..."
+# Run in a subshell with error tolerance: the parent script uses set -euo pipefail
+# which the subshell inherits. Pipelines like `find | head -1 | wc -l` can trigger
+# SIGPIPE (exit 141) when head closes the pipe early, causing pipefail to report a
+# non-zero exit and set -e to kill the entire subshell. This silently stops all
+# metric collection, leading to stale /shared files and violated assertions.
+(
+set +e
+set +o pipefail
 while true; do
     date +%s > /shared/validator_heartbeat
     # Write DB directory size (bytes) for data-integrity monitoring
@@ -206,7 +214,8 @@ while true; do
     NONVOL_CS=$(awk '/^nonvoluntary_ctxt_switches:/{print $2}' /proc/1/status 2>/dev/null || echo "-1")
     echo "${VOL_CS}:${NONVOL_CS}" > /shared/validator_ctxt_switches
     sleep 5
-done &
+done
+) &
 
 echo "Starting validator-engine..."
 exec validator-engine \
