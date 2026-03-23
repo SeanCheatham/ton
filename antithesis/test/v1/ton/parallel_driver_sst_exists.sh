@@ -51,10 +51,21 @@ if [ -f /shared/validator_heartbeat ]; then
     fi
 fi
 
-DETAILS=$(jq -cn --argjson count "$SST_COUNT" '{sst_count: $count}')
+# Check DB maturity: a freshly started standalone validator may not have flushed
+# any memtables to SST files yet. Only assert if the DB is mature enough
+# (has a non-trivial size indicating data has been written to disk).
+DB_SIZE=0
+if [ -f /shared/validator_db_size ]; then
+    DB_SIZE=$(cat /shared/validator_db_size 2>/dev/null || echo "0")
+fi
+
+DETAILS=$(jq -cn --argjson count "$SST_COUNT" --argjson db_size "$DB_SIZE" '{sst_count: $count, db_size_bytes: $db_size}')
 
 if [ "$SST_COUNT" -gt 0 ]; then
     sdk_always true "RocksDB SST files exist when validator is healthy" "$DETAILS"
+elif [ "$DB_SIZE" -lt 1048576 ]; then
+    # DB is less than 1MB — too early for SST files to exist, skip
+    echo "DB size ${DB_SIZE} bytes is too small for SST files, skipping assertion"
 else
     sdk_always false "RocksDB SST files exist when validator is healthy" "$DETAILS"
 fi

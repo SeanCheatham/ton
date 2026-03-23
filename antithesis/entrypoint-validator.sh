@@ -171,7 +171,7 @@ while true; do
     NET_BYTES=$(awk 'NR>2 && $1 !~ /lo:/ {rx+=$2; tx+=$10} END {print rx+tx}' /proc/1/net/dev 2>/dev/null || echo "-1")
     echo "$NET_BYTES" > /shared/validator_net_bytes
     # Write RocksDB SST file count for data integrity monitoring
-    SST_COUNT=$(find /var/ton-work/db -maxdepth 3 -name "*.sst" -type f 2>/dev/null | wc -l)
+    SST_COUNT=$(find /var/ton-work/db -name "*.sst" -type f 2>/dev/null | wc -l)
     echo "$SST_COUNT" > /shared/validator_sst_count
     sleep 5
 done &
