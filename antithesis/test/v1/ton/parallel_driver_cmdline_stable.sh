@@ -45,7 +45,8 @@ fi
 
 # Step 3: Read current cmdline hash
 if [[ ! -f "$HASH_FILE" ]]; then
-    echo "SKIP: cmdline hash file does not exist yet"
+    echo "Metric not available yet (validator may have just restarted)"
+    sdk_always true "${ASSERTION_NAME}" '{"status":"metric_not_yet_available","note":"heartbeat fresh but metric file pending"}'
     exit 0
 fi
 

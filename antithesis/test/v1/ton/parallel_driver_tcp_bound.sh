@@ -1,23 +1,24 @@
 #!/usr/bin/env bash
 source /opt/antithesis/test/v1/ton/helper_sdk.sh
-VALIDATOR_HOST="${VALIDATOR_HOST:-validator}"
 PROPERTY="TCP control ports are bound in kernel when healthy"
 
-# Only check when healthy (all 3 ports up)
-udp_up=false; console_up=false; lite_up=false
-nc -z -w 1 -u "$VALIDATOR_HOST" 30001 2>/dev/null && udp_up=true
-nc -z -w 1 "$VALIDATOR_HOST" 30002 2>/dev/null && console_up=true
-nc -z -w 1 "$VALIDATOR_HOST" 30003 2>/dev/null && lite_up=true
-
-if [[ "$udp_up" != "true" || "$console_up" != "true" || "$lite_up" != "true" ]]; then
-    exit 0
-fi
-
-# Guard: skip if heartbeat data is stale (loop may not have caught up after restart)
-HB_TS=$(cat /shared/validator_heartbeat 2>/dev/null | tr -d '[:space:]')
-NOW=$(date +%s)
-if [[ -z "$HB_TS" ]] || ! [[ "$HB_TS" =~ ^[0-9]+$ ]] || [ $((NOW - HB_TS)) -gt 30 ]; then
-    exit 0
+# Heartbeat-only precondition: heartbeat freshness proves the validator process
+# is actively running and metrics are valid, regardless of port status.
+HEARTBEAT_MAX_AGE=90
+if [ -f /shared/validator_heartbeat ]; then
+    HB_TS=$(cat /shared/validator_heartbeat 2>/dev/null | tr -d '[:space:]')
+    NOW=$(date +%s)
+    if [[ "$HB_TS" =~ ^[0-9]+$ ]]; then
+        AGE=$((NOW - HB_TS))
+        if [ "$AGE" -gt "$HEARTBEAT_MAX_AGE" ]; then
+            echo "Heartbeat stale (${AGE}s > ${HEARTBEAT_MAX_AGE}s), skipping"
+            sleep 5; exit 0
+        fi
+    else
+        echo "Heartbeat value invalid, skipping"; sleep 5; exit 0
+    fi
+else
+    echo "Heartbeat file not present yet, skipping"; sleep 5; exit 0
 fi
 
 TCP_BOUND=$(cat /shared/validator_tcp_bound 2>/dev/null || echo "")

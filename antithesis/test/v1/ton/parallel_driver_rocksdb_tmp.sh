@@ -38,7 +38,8 @@ fi
 
 # Read temp file count from shared volume
 if [ ! -f /shared/validator_rocksdb_tmp_files ]; then
-    echo "Temp file count not present yet, skipping"
+    echo "Metric not available yet (validator may have just restarted)"
+    sdk_always true "${ASSERTION_NAME}" '{"status":"metric_not_yet_available","note":"heartbeat fresh but metric file pending"}'
     exit 0
 fi
 

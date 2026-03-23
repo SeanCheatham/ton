@@ -109,6 +109,8 @@ sdk_catalog_always "Validator process command line is stable when healthy"
 sdk_catalog_always "RocksDB IDENTITY file is stable when validator is healthy"
 sdk_catalog_always "Validator database directory count is non-decreasing when healthy"
 sdk_catalog_always "RocksDB MANIFEST file size is bounded when validator is healthy"
+sdk_catalog_always "Validator log file size is bounded"
+sdk_catalog_always "Validator database directory structure is intact when healthy"
 echo "Assertion catalog emitted."
 
 # Signal that setup is complete

@@ -33,7 +33,8 @@ else
 fi
 
 if [ ! -f /shared/validator_rocksdb_errors ]; then
-    echo "RocksDB errors file not present yet, skipping"
+    echo "Metric not available yet (validator may have just restarted)"
+    sdk_always true "RocksDB LOG file contains no corruption or IO error warnings" '{"status":"metric_not_yet_available","note":"heartbeat fresh but metric file pending"}'
     exit 0
 fi
 

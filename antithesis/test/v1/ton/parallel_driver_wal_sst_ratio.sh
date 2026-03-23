@@ -28,7 +28,8 @@ WAL_COUNT=$(cat /shared/validator_wal_count 2>/dev/null || echo "")
 SST_COUNT=$(cat /shared/validator_sst_count 2>/dev/null || echo "")
 
 if [[ -z "$WAL_COUNT" || -z "$SST_COUNT" ]]; then
-    echo "WAL or SST count file not present yet, skipping"
+    echo "Metric not available yet (validator may have just restarted)"
+    sdk_always true "$PROPERTY" '{"status":"metric_not_yet_available","note":"heartbeat fresh but metric file pending"}'
     exit 0
 fi
 

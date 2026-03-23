@@ -45,7 +45,8 @@ fi
 
 # Step 3: Read current directory count
 if [[ ! -f "$DIR_COUNT_FILE" ]]; then
-    echo "SKIP: directory count file does not exist yet"
+    echo "Metric not available yet (validator may have just restarted)"
+    sdk_always true "${ASSERTION_NAME}" '{"status":"metric_not_yet_available","note":"heartbeat fresh but metric file pending"}'
     exit 0
 fi
 

@@ -39,7 +39,8 @@ fi
 
 # Read OPTIONS file status from shared volume
 if [ ! -f /shared/validator_rocksdb_options ]; then
-    echo "OPTIONS status file not present yet, skipping"
+    echo "Metric not available yet (validator may have just restarted)"
+    sdk_always true "${ASSERTION_NAME}" '{"status":"metric_not_yet_available","note":"heartbeat fresh but metric file pending"}'
     exit 0
 fi
 

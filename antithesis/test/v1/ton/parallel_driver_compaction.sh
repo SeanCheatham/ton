@@ -10,22 +10,24 @@ set -euo pipefail
 source "$(dirname "$0")/helper_sdk.sh"
 
 ASSERTION_NAME="RocksDB compaction has occurred when validator is mature"
-VALIDATOR_HOST="${VALIDATOR_HOST:-validator}"
-VALIDATOR_PORT="${VALIDATOR_PORT:-30001}"
-CONSOLE_PORT="${CONSOLE_PORT:-30002}"
-LITE_PORT="${LITE_PORT:-30003}"
 
-# Only check when validator is healthy (all ports up)
-if ! nc -z -w 1 -u "$VALIDATOR_HOST" "$VALIDATOR_PORT" 2>/dev/null; then
-    echo "Validator UDP not reachable, skipping"
-    sleep 10
-    exit 0
-fi
-if ! nc -z -w 1 "$VALIDATOR_HOST" "$CONSOLE_PORT" 2>/dev/null || \
-   ! nc -z -w 1 "$VALIDATOR_HOST" "$LITE_PORT" 2>/dev/null; then
-    echo "Validator TCP ports not all reachable, skipping"
-    sleep 10
-    exit 0
+# Heartbeat-only precondition: heartbeat freshness proves the validator process
+# is actively running and metrics are valid, regardless of port status.
+HEARTBEAT_MAX_AGE=90
+if [ -f /shared/validator_heartbeat ]; then
+    HB_TS=$(cat /shared/validator_heartbeat 2>/dev/null | tr -d '[:space:]')
+    NOW=$(date +%s)
+    if [[ "$HB_TS" =~ ^[0-9]+$ ]]; then
+        AGE=$((NOW - HB_TS))
+        if [ "$AGE" -gt "$HEARTBEAT_MAX_AGE" ]; then
+            echo "Heartbeat stale (${AGE}s > ${HEARTBEAT_MAX_AGE}s), skipping"
+            sleep 5; exit 0
+        fi
+    else
+        echo "Heartbeat value invalid, skipping"; sleep 5; exit 0
+    fi
+else
+    echo "Heartbeat file not present yet, skipping"; sleep 5; exit 0
 fi
 
 if [ ! -f /shared/validator_compaction_count ]; then

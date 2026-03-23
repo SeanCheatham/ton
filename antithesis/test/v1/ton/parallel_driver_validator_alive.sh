@@ -18,5 +18,6 @@ if nc -z -u "${VALIDATOR_HOST}" "${VALIDATOR_PORT}" 2>/dev/null; then
     exit 0
 else
     echo "FAIL: validator UDP port ${VALIDATOR_PORT} is not reachable"
+    sdk_sometimes false "Validator is alive during parallel driver phase"
     exit 0
 fi

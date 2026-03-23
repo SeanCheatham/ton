@@ -233,6 +233,14 @@ while true; do
     tail -20 /shared/validator_thread_history > /shared/validator_thread_history.tmp
     mv /shared/validator_thread_history.tmp /shared/validator_thread_history
 
+    # Write DB structure check: 1 if all 4 critical dirs exist, 0 otherwise
+    if [ -d /var/ton-work/db/celldb ] && [ -d /var/ton-work/db/blockdb ] && \
+       [ -d /var/ton-work/db/statedb ] && [ -d /var/ton-work/db/keyring ]; then
+        echo "1" > /shared/validator_db_structure
+    else
+        echo "0" > /shared/validator_db_structure
+    fi
+
     # Write keyring file count for cryptographic material integrity monitoring
     KEYRING_COUNT=$(ls /var/ton-work/db/keyring/ 2>/dev/null | wc -l)
     echo "$KEYRING_COUNT" > /shared/validator_keyring_count
@@ -251,6 +259,34 @@ while true; do
     date +%s > /shared/validator_heartbeat
 
     # === LOW-PRIORITY METRICS (slow find/du/grep operations) ===
+
+    # Write md5sum of /proc/1/cmdline for process identity monitoring (fast, moved earlier)
+    md5sum /proc/1/cmdline 2>/dev/null | awk '{print $1}' > /shared/validator_cmdline_hash
+
+    # Write database subdirectory count for directory structure monitoring (fast, moved earlier)
+    find /var/ton-work/db -maxdepth 2 -type d 2>/dev/null | wc -l > /shared/validator_db_dir_count
+
+    # Write RocksDB OPTIONS file count and non-empty status (moved earlier to avoid ghost assertions)
+    OPTIONS_COUNT=$(find "${DB_ROOT}" -maxdepth 2 -name 'Options-*' -o -name 'OPTIONS-*' -type f 2>/dev/null | head -5 | wc -l)
+    OPTIONS_NONEMPTY=0
+    if [ "$OPTIONS_COUNT" -gt 0 ]; then
+        FIRST_OPT=$(find "${DB_ROOT}" -maxdepth 2 -name 'Options-*' -o -name 'OPTIONS-*' -type f 2>/dev/null | head -1)
+        [ -s "$FIRST_OPT" ] && OPTIONS_NONEMPTY=1
+    fi
+    echo "${OPTIONS_COUNT}:${OPTIONS_NONEMPTY}" > /shared/validator_rocksdb_options
+
+    # Write RocksDB temporary file count (moved earlier to avoid ghost assertions)
+    TMP_COUNT=$(find "${DB_ROOT}" -maxdepth 3 \( -name '*.tmp' -o -name '*.dbtmp' \) -type f 2>/dev/null | wc -l)
+    echo "$TMP_COUNT" > /shared/validator_rocksdb_tmp_files
+
+    # Write RocksDB IDENTITY file content (moved earlier to avoid ghost assertions)
+    IDENTITY_FILE=$(find /var/ton-work/db -maxdepth 2 -name IDENTITY -type f 2>/dev/null | head -1)
+    if [ -n "$IDENTITY_FILE" ] && [ -s "$IDENTITY_FILE" ]; then
+        tr -d '[:space:]' < "$IDENTITY_FILE" > /shared/validator_rocksdb_identity
+    fi
+
+    # Refresh heartbeat after moved metrics
+    date +%s > /shared/validator_heartbeat
 
     # Write DB directory size (bytes) for data-integrity monitoring
     if [ -d "/var/ton-work/db" ]; then
@@ -356,29 +392,8 @@ while true; do
     # TON uses multiple RocksDB instances in subdirs (celldb/, blockdb/, statedb/)
     SST_COUNT=$(find /var/ton-work/db -maxdepth 5 \( -name "*.sst" -o -name "*.ldb" \) -type f 2>/dev/null | wc -l)
     echo "$SST_COUNT" > /shared/validator_sst_count
-    # Write RocksDB OPTIONS file count and non-empty status for configuration integrity
-    OPTIONS_COUNT=$(find "${DB_ROOT}" -maxdepth 2 -name 'OPTIONS-*' -type f 2>/dev/null | head -5 | wc -l)
-    OPTIONS_NONEMPTY=0
-    if [ "$OPTIONS_COUNT" -gt 0 ]; then
-        FIRST_OPT=$(find "${DB_ROOT}" -maxdepth 2 -name 'OPTIONS-*' -type f 2>/dev/null | head -1)
-        [ -s "$FIRST_OPT" ] && OPTIONS_NONEMPTY=1
-    fi
-    echo "${OPTIONS_COUNT}:${OPTIONS_NONEMPTY}" > /shared/validator_rocksdb_options
-    # Write RocksDB temporary file count for compaction health monitoring
-    TMP_COUNT=$(find "${DB_ROOT}" -maxdepth 3 \( -name '*.tmp' -o -name '*.dbtmp' \) -type f 2>/dev/null | wc -l)
-    echo "$TMP_COUNT" > /shared/validator_rocksdb_tmp_files
-
-    # Write md5sum of /proc/1/cmdline for process identity monitoring
-    md5sum /proc/1/cmdline 2>/dev/null | awk '{print $1}' > /shared/validator_cmdline_hash
-
-    # Write RocksDB IDENTITY file content for database identity monitoring
-    IDENTITY_FILE=$(find /var/ton-work/db -maxdepth 2 -name IDENTITY -type f 2>/dev/null | head -1)
-    if [ -n "$IDENTITY_FILE" ] && [ -s "$IDENTITY_FILE" ]; then
-        tr -d '[:space:]' < "$IDENTITY_FILE" > /shared/validator_rocksdb_identity
-    fi
-
-    # Write database subdirectory count for directory structure monitoring
-    find /var/ton-work/db -maxdepth 2 -type d 2>/dev/null | wc -l > /shared/validator_db_dir_count
+    # (rocksdb_options, rocksdb_tmp_files, cmdline_hash, rocksdb_identity, db_dir_count
+    #  moved to early low-priority section to avoid ghost assertions under frequent restarts)
 
     # Final heartbeat write at end of loop
     date +%s > /shared/validator_heartbeat
