@@ -291,9 +291,14 @@ while true; do
     tail -20 /shared/validator_thread_history > /shared/validator_thread_history.tmp
     mv /shared/validator_thread_history.tmp /shared/validator_thread_history
 
-    # Write DB structure check: 1 if all 4 critical dirs exist, 0 otherwise
-    if [ -d /var/ton-work/db/celldb ] && [ -d /var/ton-work/db/blockdb ] && \
-       [ -d /var/ton-work/db/statedb ] && [ -d /var/ton-work/db/keyring ]; then
+    # Write DB structure check: 1 if critical dirs exist, 0 otherwise
+    # TON validator-engine creates keyring/ (also pre-created by entrypoint) and
+    # celldb/ as top-level subdirectories. It does NOT create "blockdb" or "statedb"
+    # as separate top-level directories — those are internal RocksDB column families.
+    # We check: keyring (crypto keys) + the DB root has a config.json (validator config)
+    # + at least one RocksDB metadata file (CURRENT or MANIFEST-*).
+    if [ -d /var/ton-work/db/keyring ] && [ -f /var/ton-work/db/config.json ] && \
+       { [ -f /var/ton-work/db/CURRENT ] || ls /var/ton-work/db/MANIFEST-* >/dev/null 2>&1; }; then
         echo "1" > /shared/validator_db_structure
     else
         echo "0" > /shared/validator_db_structure
@@ -338,11 +343,20 @@ while true; do
     echo "$TMP_COUNT" > /shared/validator_rocksdb_tmp_files
 
     # Write RocksDB IDENTITY file content (moved earlier to avoid ghost assertions)
-    IDENTITY_FILE=$(find /var/ton-work/db -maxdepth 2 -name IDENTITY -type f 2>/dev/null | head -1)
-    if [ -n "$IDENTITY_FILE" ] && [ -s "$IDENTITY_FILE" ]; then
-        tr -d '[:space:]' < "$IDENTITY_FILE" > /shared/validator_rocksdb_identity
+    # Use a fixed path (/var/ton-work/db/IDENTITY) to ensure we always read the
+    # same file. Previously, `find ... | head -1` could return IDENTITY files from
+    # different RocksDB sub-instances (celldb/, blockdb/) in different orders across
+    # iterations, making the identity appear to change and violating the stability
+    # assertion. Fall back to find only if the root IDENTITY doesn't exist.
+    if [ -f /var/ton-work/db/IDENTITY ] && [ -s /var/ton-work/db/IDENTITY ]; then
+        tr -d '[:space:]' < /var/ton-work/db/IDENTITY > /shared/validator_rocksdb_identity
     else
-        touch /shared/validator_rocksdb_identity
+        IDENTITY_FILE=$(find /var/ton-work/db -maxdepth 2 -name IDENTITY -type f 2>/dev/null | sort | head -1)
+        if [ -n "$IDENTITY_FILE" ] && [ -s "$IDENTITY_FILE" ]; then
+            tr -d '[:space:]' < "$IDENTITY_FILE" > /shared/validator_rocksdb_identity
+        else
+            touch /shared/validator_rocksdb_identity
+        fi
     fi
 
     # Refresh heartbeat after moved metrics

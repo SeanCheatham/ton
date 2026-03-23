@@ -79,9 +79,10 @@ SPREAD=$((MAX_MTIME - MIN_MTIME))
 # Threshold must accommodate the full heartbeat loop duration.
 # The loop includes multiple slow operations (du -sb, find, jq, grep)
 # that can each take 10-30s under fault injection I/O delays.
-# 120s is generous enough to avoid false positives while still catching
-# truly stale metrics (e.g., a stuck operation blocking the loop).
-THRESHOLD=120
+# Under heavy fault injection, the full loop can take 3-5 minutes due to
+# I/O stalls on filesystem operations (du, find, stat, jq). 300s is generous
+# enough to avoid false positives while still detecting truly stuck loops.
+THRESHOLD=300
 
 if [ "$SPREAD" -le "$THRESHOLD" ]; then
     echo "PASS: Metric file mtime spread is ${SPREAD}s across ${FILE_COUNT} files (threshold: ${THRESHOLD}s)"

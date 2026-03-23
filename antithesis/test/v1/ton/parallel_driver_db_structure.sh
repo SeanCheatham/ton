@@ -2,11 +2,11 @@
 set -euo pipefail
 
 # Parallel driver: Validator database directory structure is intact when healthy
-# When the validator heartbeat is fresh, the critical database subdirectories
-# (celldb, blockdb, statedb, keyring) must all exist under /var/ton-work/db/.
-# A missing subdirectory indicates catastrophic data corruption or filesystem
-# failure that other assertions (DB size, DB permissions, etc.) would miss
-# because they check aggregate properties without verifying structural integrity.
+# When the validator heartbeat is fresh, the critical database components
+# (keyring/ directory, config.json, and RocksDB metadata like CURRENT/MANIFEST)
+# must exist under /var/ton-work/db/. A missing component indicates catastrophic
+# data corruption or filesystem failure that other assertions (DB size, DB
+# permissions, etc.) would miss because they check aggregate properties.
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/helper_sdk.sh"
@@ -49,12 +49,12 @@ if [ -z "$DB_STRUCTURE" ] || ! [[ "$DB_STRUCTURE" =~ ^[01]$ ]]; then
 fi
 
 if [ "$DB_STRUCTURE" = "1" ]; then
-    echo "PASS: All critical database subdirectories exist (celldb, blockdb, statedb, keyring)"
-    DETAILS=$(jq -cn '{status: "all_present", dirs: ["celldb", "blockdb", "statedb", "keyring"]}')
+    echo "PASS: Critical database structure intact (keyring/, config.json, RocksDB metadata)"
+    DETAILS=$(jq -cn '{status: "all_present", checks: ["keyring_dir", "config_json", "rocksdb_metadata"]}')
     sdk_always true "${ASSERTION_NAME}" "$DETAILS"
 else
-    echo "FAIL: One or more critical database subdirectories missing"
-    DETAILS=$(jq -cn '{status: "missing_dirs", dirs: ["celldb", "blockdb", "statedb", "keyring"]}')
+    echo "FAIL: Critical database structure missing components"
+    DETAILS=$(jq -cn '{status: "missing_components", checks: ["keyring_dir", "config_json", "rocksdb_metadata"]}')
     sdk_always false "${ASSERTION_NAME}" "$DETAILS"
 fi
 
