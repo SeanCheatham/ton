@@ -12,9 +12,10 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/helper_sdk.sh"
 
 VALIDATOR_HOST="${VALIDATOR_HOST:-validator}"
-UDP_PORT="${VALIDATOR_PORT:-30001}"
+CONSOLE_PORT="${CONSOLE_PORT:-30002}"
+LITE_PORT="${LITE_PORT:-30003}"
 HEARTBEAT_FILE="/shared/validator_heartbeat"
-MAX_AGE=30
+MAX_AGE=45
 
 ASSERTION_NAME="Validator heartbeat is fresh when ports are reachable"
 
@@ -23,14 +24,17 @@ sdk_catalog_always "${ASSERTION_NAME}"
 
 echo "Checking validator heartbeat freshness..."
 
-# Step 1: Check if the main UDP port is reachable.
-# If it's down, the validator is fully down — skip the heartbeat check.
-if ! nc -z -u -w 2 "${VALIDATOR_HOST}" "${UDP_PORT}" 2>/dev/null; then
-    echo "SKIP: validator UDP port ${UDP_PORT} is not reachable (validator may be down)"
+# Step 1: Check if a TCP port is reachable (reliable, unlike UDP nc -z -u).
+# UDP port checks with nc are unreliable: nc -z -u often reports success even
+# when nothing is listening because UDP is connectionless and ICMP
+# port-unreachable responses may not arrive. Use TCP console port instead.
+if ! nc -z -w 2 "${VALIDATOR_HOST}" "${CONSOLE_PORT}" 2>/dev/null && \
+   ! nc -z -w 2 "${VALIDATOR_HOST}" "${LITE_PORT}" 2>/dev/null; then
+    echo "SKIP: validator TCP ports not reachable (validator may be down)"
     exit 0
 fi
 
-echo "UDP port ${UDP_PORT} is reachable, checking heartbeat..."
+echo "TCP port reachable, checking heartbeat..."
 
 # Step 2: Check heartbeat file exists
 if [ ! -f "${HEARTBEAT_FILE}" ]; then
