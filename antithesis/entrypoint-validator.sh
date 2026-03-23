@@ -103,6 +103,12 @@ while true; do
     else
         echo "-1" > /shared/validator_config_valid
     fi
+    # Write most recent DB file modification time for activity monitoring
+    DB_MTIME=$(find /var/ton-work/db -type f -printf '%T@\n' 2>/dev/null | sort -rn | head -1 | cut -d. -f1)
+    echo "${DB_MTIME:--1}" > /shared/validator_db_mtime
+    # Write cumulative CPU time (user + system ticks) for activity monitoring
+    CPU_TICKS=$(awk '{print $14 + $15}' /proc/1/stat 2>/dev/null || echo "-1")
+    echo "$CPU_TICKS" > /shared/validator_cpu_ticks
     sleep 5
 done &
 
