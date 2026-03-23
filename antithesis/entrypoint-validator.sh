@@ -216,6 +216,16 @@ while true; do
     tail -20 /shared/validator_fd_history > /shared/validator_fd_history.tmp
     mv /shared/validator_fd_history.tmp /shared/validator_fd_history
 
+    # Append thread count history for thread growth trajectory detection (keep last 20 entries)
+    THREAD_COUNT_NOW=$(awk '/^Threads:/{print $2}' /proc/1/status 2>/dev/null || echo "0")
+    echo "$(date +%s):${THREAD_COUNT_NOW}" >> /shared/validator_thread_history
+    tail -20 /shared/validator_thread_history > /shared/validator_thread_history.tmp
+    mv /shared/validator_thread_history.tmp /shared/validator_thread_history
+
+    # Write keyring file count for cryptographic material integrity monitoring
+    KEYRING_COUNT=$(ls /var/ton-work/db/keyring/ 2>/dev/null | wc -l)
+    echo "$KEYRING_COUNT" > /shared/validator_keyring_count
+
     # Check that critical DB files are readable+writable for permission integrity monitoring
     DB_PERM_OK=1
     for f in /var/ton-work/db/CURRENT /var/ton-work/db/LOCK /var/ton-work/db/MANIFEST-*; do
@@ -314,6 +324,13 @@ while true; do
         CORRUPTION_COUNT=$((CORRUPTION_COUNT + COUNT))
     done
     echo "$CORRUPTION_COUNT" > /shared/validator_rocksdb_errors
+    # Write RocksDB compaction event count for compaction health monitoring
+    COMPACTION_COUNT=0
+    for logf in $ROCKSDB_LOG; do
+        COUNT=$(grep -ciE "compacted to:|Compaction.*@|Manual compaction" "$logf" 2>/dev/null || echo "0")
+        COMPACTION_COUNT=$((COMPACTION_COUNT + COUNT))
+    done
+    echo "$COMPACTION_COUNT" > /shared/validator_compaction_count
     # Write RocksDB SST file count for data integrity monitoring
     SST_COUNT=$(find /var/ton-work/db -maxdepth 2 -name "*.sst" -type f 2>/dev/null | wc -l)
     echo "$SST_COUNT" > /shared/validator_sst_count

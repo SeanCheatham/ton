@@ -102,6 +102,9 @@ sdk_catalog_always "Validator critical signals are not blocked when healthy"
 sdk_catalog_always "Validator RSS memory is not monotonically growing"
 sdk_catalog_always "Validator database file permissions are correct when healthy"
 sdk_catalog_always "Validator open FD count is not monotonically growing"
+sdk_catalog_always "Validator thread count is not monotonically growing"
+sdk_catalog_always "Validator keyring directory is non-empty when healthy"
+sdk_catalog_sometimes "RocksDB compaction has occurred when validator is mature"
 echo "Assertion catalog emitted."
 
 # Signal that setup is complete
