@@ -68,6 +68,9 @@ sdk_catalog_always "Validator is actively modifying database files"
 sdk_catalog_always "Validator CPU time is advancing when healthy"
 sdk_catalog_always "Validator process state is runnable"
 sdk_catalog_always "Validator UDP socket is bound when healthy"
+sdk_catalog_always "RocksDB WAL file count is bounded"
+sdk_catalog_always "Validator I/O wait time is bounded"
+sdk_catalog_always "TCP control ports are bound in kernel when healthy"
 echo "Assertion catalog emitted."
 
 # Signal that setup is complete

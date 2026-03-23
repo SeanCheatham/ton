@@ -117,6 +117,19 @@ while true; do
     # Write UDP socket bound status for port 30001 (0x7531 in hex)
     UDP_BOUND=$(awk '$2 ~ /:7531$/ {found=1} END {print found+0}' /proc/1/net/udp 2>/dev/null || echo "-1")
     echo "$UDP_BOUND" > /shared/validator_udp_bound
+    # Write RocksDB WAL (.log) file count for compaction health monitoring
+    WAL_COUNT=$(find /var/ton-work/db -maxdepth 2 -name "*.log" -type f 2>/dev/null | wc -l)
+    echo "$WAL_COUNT" > /shared/validator_wal_count
+    # Write cumulative block I/O delay ticks (field 42 of /proc/1/stat)
+    IO_TICKS=$(awk '{print $42}' /proc/1/stat 2>/dev/null || echo "-1")
+    echo "$IO_TICKS" > /shared/validator_io_ticks
+    # Write TCP control ports bound status (30002=0x7532, 30003=0x7533)
+    TCP_PORTS=$(cat /proc/1/net/tcp 2>/dev/null)
+    if echo "$TCP_PORTS" | grep -qi "00000000:7532.*0A" && echo "$TCP_PORTS" | grep -qi "00000000:7533.*0A"; then
+        echo 1 > /shared/validator_tcp_bound
+    else
+        echo 0 > /shared/validator_tcp_bound
+    fi
     sleep 5
 done &
 
