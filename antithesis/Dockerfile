@@ -17,7 +17,7 @@ RUN apt-get update && \
         apt-get update && \
         apt install libc-bin && \
         apt-get install -y build-essential cmake clang gperf wget git \
-        ninja-build pkg-config autoconf automake libtool \
+        ninja-build pkg-config autoconf automake libtool perl \
         libjemalloc-dev lsb-release software-properties-common gnupg ccache
 
 RUN wget https://apt.llvm.org/llvm.sh && \
