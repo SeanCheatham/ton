@@ -102,15 +102,22 @@ while true; do
     # Write TCP control ports bound status (30002=0x7532, 30003=0x7533)
     # Only write once the validator process is PID 1 (after exec) to avoid stale "0"
     # Match any local IP (validator may bind to 127.0.0.1 not 0.0.0.0)
+    # Check both /proc/1/net/tcp (IPv4) and /proc/1/net/tcp6 (IPv6) because
+    # validator-engine may bind control/liteserver ports to IPv6 (::) which
+    # creates dual-stack sockets visible only in tcp6.
     # Don't write "0" until we've confirmed both ports were bound at least once,
     # to avoid false violations during startup.
+    # Also don't write "0" if /proc reads fail (empty data) — transient failures
+    # under fault injection should not be treated as ports going down.
     if grep -q validator-engine /proc/1/cmdline 2>/dev/null; then
-        TCP_PORTS=$(cat /proc/1/net/tcp 2>/dev/null)
-        if echo "$TCP_PORTS" | grep -qi ":7532 .*0A" && echo "$TCP_PORTS" | grep -qi ":7533 .*0A"; then
-            _TCP_EVER_BOUND=true
-            echo 1 > /shared/validator_tcp_bound
-        elif [ "$_TCP_EVER_BOUND" = "true" ]; then
-            echo 0 > /shared/validator_tcp_bound
+        TCP_PORTS=$(cat /proc/1/net/tcp /proc/1/net/tcp6 2>/dev/null)
+        if [ -n "$TCP_PORTS" ]; then
+            if echo "$TCP_PORTS" | grep -qi ":7532 .*0A" && echo "$TCP_PORTS" | grep -qi ":7533 .*0A"; then
+                _TCP_EVER_BOUND=true
+                echo 1 > /shared/validator_tcp_bound
+            elif [ "$_TCP_EVER_BOUND" = "true" ]; then
+                echo 0 > /shared/validator_tcp_bound
+            fi
         fi
     fi
 
