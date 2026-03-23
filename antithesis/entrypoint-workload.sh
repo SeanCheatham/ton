@@ -51,6 +51,7 @@ sdk_catalog_sometimes "Validator recovers fully after fault injection"
 sdk_catalog_sometimes "Validator recovers mid-test after going down"
 sdk_catalog_sometimes "Validator is alive during parallel driver phase"
 sdk_catalog_always "Validator heartbeat is fresh when ports are reachable"
+sdk_catalog_always "Validator downtime is bounded after initial startup"
 echo "Assertion catalog emitted."
 
 # Signal that setup is complete
