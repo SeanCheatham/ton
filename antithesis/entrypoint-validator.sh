@@ -136,9 +136,10 @@ while true; do
     echo "$MANIFEST_COUNT" > /shared/validator_manifest_count
     # Write TCP control ports bound status (30002=0x7532, 30003=0x7533)
     # Only write once the validator process is PID 1 (after exec) to avoid stale "0"
+    # Match any local IP (validator may bind to 127.0.0.1 not 0.0.0.0)
     if grep -q validator-engine /proc/1/cmdline 2>/dev/null; then
         TCP_PORTS=$(cat /proc/1/net/tcp 2>/dev/null)
-        if echo "$TCP_PORTS" | grep -qi "00000000:7532.*0A" && echo "$TCP_PORTS" | grep -qi "00000000:7533.*0A"; then
+        if echo "$TCP_PORTS" | grep -qi ":7532 .*0A" && echo "$TCP_PORTS" | grep -qi ":7533 .*0A"; then
             echo 1 > /shared/validator_tcp_bound
         else
             echo 0 > /shared/validator_tcp_bound
