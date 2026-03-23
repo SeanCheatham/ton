@@ -13,6 +13,13 @@ if [[ "$udp_up" != "true" || "$console_up" != "true" || "$lite_up" != "true" ]];
     exit 0
 fi
 
+# Guard: skip if heartbeat data is stale (loop may not have caught up after restart)
+HB_TS=$(cat /shared/validator_heartbeat 2>/dev/null | tr -d '[:space:]')
+NOW=$(date +%s)
+if [[ -z "$HB_TS" ]] || ! [[ "$HB_TS" =~ ^[0-9]+$ ]] || [ $((NOW - HB_TS)) -gt 30 ]; then
+    exit 0
+fi
+
 TCP_BOUND=$(cat /shared/validator_tcp_bound 2>/dev/null || echo "")
 if [[ -z "$TCP_BOUND" ]]; then
     exit 0

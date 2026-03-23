@@ -86,10 +86,46 @@ _UDP_EVER_BOUND=false
 _TCP_EVER_BOUND=false
 while true; do
     date +%s > /shared/validator_heartbeat
-    # Write DB directory size (bytes) for data-integrity monitoring
-    if [ -d "/var/ton-work/db" ]; then
-        du -sb /var/ton-work/db 2>/dev/null | cut -f1 > /shared/validator_db_size
+
+    # === HIGH-PRIORITY METRICS (checked by assertions sensitive to staleness) ===
+    # These run first so they are always fresh relative to the heartbeat timestamp.
+
+    # Write TCP control ports bound status (30002=0x7532, 30003=0x7533)
+    # Only write once the validator process is PID 1 (after exec) to avoid stale "0"
+    # Match any local IP (validator may bind to 127.0.0.1 not 0.0.0.0)
+    # Don't write "0" until we've confirmed both ports were bound at least once,
+    # to avoid false violations during startup.
+    if grep -q validator-engine /proc/1/cmdline 2>/dev/null; then
+        TCP_PORTS=$(cat /proc/1/net/tcp 2>/dev/null)
+        if echo "$TCP_PORTS" | grep -qi ":7532 .*0A" && echo "$TCP_PORTS" | grep -qi ":7533 .*0A"; then
+            _TCP_EVER_BOUND=true
+            echo 1 > /shared/validator_tcp_bound
+        elif [ "$_TCP_EVER_BOUND" = "true" ]; then
+            echo 0 > /shared/validator_tcp_bound
+        fi
     fi
+
+    # Write most recent DB file modification time for activity monitoring
+    # Use -maxdepth 2 to avoid expensive full-tree traversal on large DBs.
+    DB_MTIME=$(find /var/ton-work/db -maxdepth 2 -type f -printf '%T@\n' 2>/dev/null | sort -rn | head -1 | cut -d. -f1)
+    echo "${DB_MTIME:--1}" > /shared/validator_db_mtime
+
+    # Write UDP socket bound status for port 30001 (0x7531 in hex)
+    if grep -q validator-engine /proc/1/cmdline 2>/dev/null; then
+        UDP_BOUND=$(awk '$2 ~ /:7531$/ {found=1} END {print found+0}' /proc/1/net/udp 2>/dev/null || echo "-1")
+        if [ "$UDP_BOUND" = "1" ]; then
+            _UDP_EVER_BOUND=true
+            echo "1" > /shared/validator_udp_bound
+        elif [ "$_UDP_EVER_BOUND" = "true" ]; then
+            echo "0" > /shared/validator_udp_bound
+        fi
+    fi
+
+    # Refresh heartbeat after high-priority metrics
+    date +%s > /shared/validator_heartbeat
+
+    # === MEDIUM-PRIORITY METRICS (fast /proc reads) ===
+
     # Write open file descriptor count for resource monitoring
     FD_COUNT=$(ls /proc/1/fd 2>/dev/null | wc -l || echo "-1")
     echo "$FD_COUNT" > /shared/validator_fd_count
@@ -101,8 +137,45 @@ while true; do
     # Subtract 1 for the header line
     SOCK_COUNT=$((SOCK_COUNT - 1))
     echo "$SOCK_COUNT" > /shared/validator_sock_count
+    # Write cumulative CPU time (user + system ticks) for activity monitoring
+    CPU_TICKS=$(awk '{print $14 + $15}' /proc/1/stat 2>/dev/null || echo "-1")
+    echo "$CPU_TICKS" > /shared/validator_cpu_ticks
+    # Write process state (R=running, S=sleeping, D=uninterruptible, T=stopped, Z=zombie)
+    PROC_STATE=$(awk '/^State:/{print $2}' /proc/1/status 2>/dev/null || echo "?")
+    echo "$PROC_STATE" > /shared/validator_proc_state
+    # Write cumulative block I/O delay ticks (field 42 of /proc/1/stat)
+    IO_TICKS=$(awk '{print $42}' /proc/1/stat 2>/dev/null || echo "-1")
+    echo "$IO_TICKS" > /shared/validator_io_ticks
+    # Write thread count for resource monitoring
+    THREAD_COUNT=$(awk '/^Threads:/{print $2}' /proc/1/status 2>/dev/null || echo "-1")
+    echo "$THREAD_COUNT" > /shared/validator_thread_count
+    # Write swap usage (KB) for memory quality monitoring
+    SWAP_KB=$(awk '/VmSwap/{print $2}' /proc/1/status 2>/dev/null || echo "-1")
+    echo "$SWAP_KB" > /shared/validator_swap_kb
+    # Write count of leaked deleted file descriptors
+    DELETED_FDS=$(ls -la /proc/1/fd 2>/dev/null | grep -c '(deleted)' || echo "0")
+    echo "$DELETED_FDS" > /shared/validator_deleted_fds
+    # Sum rx_bytes + tx_bytes across all interfaces (skip lo), fields 2 and 10
+    NET_BYTES=$(awk 'NR>2 && $1 !~ /lo:/ {rx+=$2; tx+=$10} END {print rx+tx}' /proc/1/net/dev 2>/dev/null || echo "-1")
+    echo "$NET_BYTES" > /shared/validator_net_bytes
+    # Sum rx_errs + tx_errs + rx_drop + tx_drop across all interfaces (skip lo)
+    NET_ERRORS=$(awk 'NR>2 && $1 !~ /lo:/ {e+=$4+$5+$12+$13} END {print e+0}' /proc/1/net/dev 2>/dev/null || echo "-1")
+    echo "$NET_ERRORS" > /shared/validator_net_errors
+    # Write voluntary + nonvoluntary context switches for scheduling health monitoring
+    VOL_CS=$(awk '/^voluntary_ctxt_switches:/{print $2}' /proc/1/status 2>/dev/null || echo "-1")
+    NONVOL_CS=$(awk '/^nonvoluntary_ctxt_switches:/{print $2}' /proc/1/status 2>/dev/null || echo "-1")
+    echo "${VOL_CS}:${NONVOL_CS}" > /shared/validator_ctxt_switches
+
+    # Refresh heartbeat before slow filesystem operations
+    date +%s > /shared/validator_heartbeat
+
+    # === LOW-PRIORITY METRICS (slow find/du/grep operations) ===
+
+    # Write DB directory size (bytes) for data-integrity monitoring
+    if [ -d "/var/ton-work/db" ]; then
+        du -sb /var/ton-work/db 2>/dev/null | cut -f1 > /shared/validator_db_size
+    fi
     # Write RocksDB LOCK file existence for DB integrity monitoring
-    # RocksDB may place the LOCK file in a subdirectory (e.g., /var/ton-work/db/celldb/LOCK)
     LOCK_COUNT=$(find /var/ton-work/db -maxdepth 2 -name LOCK -type f 2>/dev/null | head -1 | wc -l)
     if [ "$LOCK_COUNT" -gt 0 ]; then
         echo "1" > /shared/validator_db_lock
@@ -119,58 +192,19 @@ while true; do
     else
         echo "-1" > /shared/validator_config_valid
     fi
-    # Write most recent DB file modification time for activity monitoring
-    # Use -maxdepth 2 to avoid expensive full-tree traversal on large DBs.
-    # Use sort -rn | head -1 but limit to top-level and one sublevel.
-    DB_MTIME=$(find /var/ton-work/db -maxdepth 2 -type f -printf '%T@\n' 2>/dev/null | sort -rn | head -1 | cut -d. -f1)
-    echo "${DB_MTIME:--1}" > /shared/validator_db_mtime
-    # Write cumulative CPU time (user + system ticks) for activity monitoring
-    CPU_TICKS=$(awk '{print $14 + $15}' /proc/1/stat 2>/dev/null || echo "-1")
-    echo "$CPU_TICKS" > /shared/validator_cpu_ticks
-    # Write process state (R=running, S=sleeping, D=uninterruptible, T=stopped, Z=zombie)
-    PROC_STATE=$(awk '/^State:/{print $2}' /proc/1/status 2>/dev/null || echo "?")
-    echo "$PROC_STATE" > /shared/validator_proc_state
-    # Write UDP socket bound status for port 30001 (0x7531 in hex)
-    # Only write once the validator process is PID 1 (after exec); before that,
-    # PID 1 is bash and the UDP socket won't be bound yet.
-    # Additionally, don't write "0" until we've seen the port bound at least once,
-    # to avoid false violations during the brief startup window where validator-engine
-    # is running but hasn't finished binding the UDP socket yet.
-    if grep -q validator-engine /proc/1/cmdline 2>/dev/null; then
-        UDP_BOUND=$(awk '$2 ~ /:7531$/ {found=1} END {print found+0}' /proc/1/net/udp 2>/dev/null || echo "-1")
-        if [ "$UDP_BOUND" = "1" ]; then
-            _UDP_EVER_BOUND=true
-            echo "1" > /shared/validator_udp_bound
-        elif [ "$_UDP_EVER_BOUND" = "true" ]; then
-            echo "0" > /shared/validator_udp_bound
-        fi
-    fi
     # Write RocksDB WAL (.log) file count for compaction health monitoring
     WAL_COUNT=$(find /var/ton-work/db -maxdepth 2 -name "*.log" -type f 2>/dev/null | wc -l)
     echo "$WAL_COUNT" > /shared/validator_wal_count
-    # Write cumulative block I/O delay ticks (field 42 of /proc/1/stat)
-    IO_TICKS=$(awk '{print $42}' /proc/1/stat 2>/dev/null || echo "-1")
-    echo "$IO_TICKS" > /shared/validator_io_ticks
+
+    # Refresh heartbeat mid-way through slow operations
+    date +%s > /shared/validator_heartbeat
+
     # Write total disk usage of /var/ton-work for disk budget monitoring
     DISK_USAGE=$(du -sb /var/ton-work 2>/dev/null | cut -f1 || echo "-1")
     echo "$DISK_USAGE" > /shared/validator_disk_usage
     # Write RocksDB MANIFEST file count for data integrity monitoring
     MANIFEST_COUNT=$(find /var/ton-work/db -maxdepth 2 -name "MANIFEST-*" -type f 2>/dev/null | wc -l)
     echo "$MANIFEST_COUNT" > /shared/validator_manifest_count
-    # Write TCP control ports bound status (30002=0x7532, 30003=0x7533)
-    # Only write once the validator process is PID 1 (after exec) to avoid stale "0"
-    # Match any local IP (validator may bind to 127.0.0.1 not 0.0.0.0)
-    # Don't write "0" until we've confirmed both ports were bound at least once,
-    # to avoid false violations during startup.
-    if grep -q validator-engine /proc/1/cmdline 2>/dev/null; then
-        TCP_PORTS=$(cat /proc/1/net/tcp 2>/dev/null)
-        if echo "$TCP_PORTS" | grep -qi ":7532 .*0A" && echo "$TCP_PORTS" | grep -qi ":7533 .*0A"; then
-            _TCP_EVER_BOUND=true
-            echo 1 > /shared/validator_tcp_bound
-        elif [ "$_TCP_EVER_BOUND" = "true" ]; then
-            echo 0 > /shared/validator_tcp_bound
-        fi
-    fi
     # Write RocksDB CURRENT file validity (root of metadata chain: CURRENT → MANIFEST → SST)
     CURRENT_FILE=$(find /var/ton-work/db -maxdepth 2 -name CURRENT -type f 2>/dev/null | head -1)
     if [ -n "$CURRENT_FILE" ] && [ -s "$CURRENT_FILE" ]; then
@@ -190,9 +224,6 @@ while true; do
     else
         echo "-1" > /shared/validator_current_manifest_consistent
     fi
-    # Write count of leaked deleted file descriptors
-    DELETED_FDS=$(ls -la /proc/1/fd 2>/dev/null | grep -c '(deleted)' || echo "0")
-    echo "$DELETED_FDS" > /shared/validator_deleted_fds
     # Write ton-global.config JSON validity
     if [ -f "/var/ton-work/db/ton-global.config" ]; then
         if jq empty /var/ton-work/db/ton-global.config 2>/dev/null; then
@@ -203,16 +234,10 @@ while true; do
     else
         echo "-1" > /shared/validator_global_config_valid
     fi
-    # Write thread count for resource monitoring
-    THREAD_COUNT=$(awk '/^Threads:/{print $2}' /proc/1/status 2>/dev/null || echo "-1")
-    echo "$THREAD_COUNT" > /shared/validator_thread_count
-    # Sum rx_bytes + tx_bytes across all interfaces (skip lo), fields 2 and 10
-    NET_BYTES=$(awk 'NR>2 && $1 !~ /lo:/ {rx+=$2; tx+=$10} END {print rx+tx}' /proc/1/net/dev 2>/dev/null || echo "-1")
-    echo "$NET_BYTES" > /shared/validator_net_bytes
-    # Sum rx_errs + tx_errs + rx_drop + tx_drop across all interfaces (skip lo)
-    # /proc/net/dev fields: 1=iface 2=rx_bytes 3=rx_packets 4=rx_errs 5=rx_drop ... 10=tx_bytes 11=tx_packets 12=tx_errs 13=tx_drop
-    NET_ERRORS=$(awk 'NR>2 && $1 !~ /lo:/ {e+=$4+$5+$12+$13} END {print e+0}' /proc/1/net/dev 2>/dev/null || echo "-1")
-    echo "$NET_ERRORS" > /shared/validator_net_errors
+
+    # Refresh heartbeat before final batch
+    date +%s > /shared/validator_heartbeat
+
     # Scan RocksDB LOG files for corruption/IO error indicators
     ROCKSDB_LOG=$(find /var/ton-work/db -maxdepth 2 -name "LOG" -type f 2>/dev/null | head -5)
     CORRUPTION_COUNT=0
@@ -221,20 +246,11 @@ while true; do
         CORRUPTION_COUNT=$((CORRUPTION_COUNT + COUNT))
     done
     echo "$CORRUPTION_COUNT" > /shared/validator_rocksdb_errors
-    # Write swap usage (KB) for memory quality monitoring
-    SWAP_KB=$(awk '/VmSwap/{print $2}' /proc/1/status 2>/dev/null || echo "-1")
-    echo "$SWAP_KB" > /shared/validator_swap_kb
     # Write RocksDB SST file count for data integrity monitoring
     SST_COUNT=$(find /var/ton-work/db -maxdepth 2 -name "*.sst" -type f 2>/dev/null | wc -l)
     echo "$SST_COUNT" > /shared/validator_sst_count
-    # Write voluntary + nonvoluntary context switches for scheduling health monitoring
-    VOL_CS=$(awk '/^voluntary_ctxt_switches:/{print $2}' /proc/1/status 2>/dev/null || echo "-1")
-    NONVOL_CS=$(awk '/^nonvoluntary_ctxt_switches:/{print $2}' /proc/1/status 2>/dev/null || echo "-1")
-    echo "${VOL_CS}:${NONVOL_CS}" > /shared/validator_ctxt_switches
-    # Write heartbeat again at end of loop to keep it fresh even when
-    # the metric collection above takes a long time (many find/du operations).
-    # Without this, the heartbeat can become stale if operations take >40s,
-    # causing "heartbeat is fresh" assertions to fail.
+
+    # Final heartbeat write at end of loop
     date +%s > /shared/validator_heartbeat
     sleep 5
 done
