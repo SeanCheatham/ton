@@ -111,6 +111,8 @@ sdk_catalog_always "Validator database directory count is non-decreasing when he
 sdk_catalog_always "RocksDB MANIFEST file size is bounded when validator is healthy"
 sdk_catalog_always "Validator log file size is bounded"
 sdk_catalog_always "Validator database directory structure is intact when healthy"
+sdk_catalog_always "Validator virtual memory size is bounded"
+sdk_catalog_always "RocksDB LOG file size is bounded when validator is healthy"
 echo "Assertion catalog emitted."
 
 # Signal that setup is complete

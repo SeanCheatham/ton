@@ -137,6 +137,8 @@ echo "unknown" > /shared/validator_rocksdb_identity
 echo "0" > /shared/validator_manifest_size
 echo "0" > /shared/validator_compaction_count
 echo "0:0" > /shared/validator_thread_history
+echo "-1" > /shared/validator_vmsize
+echo "0" > /shared/validator_rocksdb_log_size
 # Write a unique startup generation ID so drivers can detect container restarts
 # and reset their cross-invocation state (e.g., first-observed IDENTITY).
 date +%s%N > /shared/validator_startup_id
@@ -239,6 +241,9 @@ while true; do
     # Write peak virtual memory (KB) — monotonically non-decreasing high-water mark
     VMPEAK_KB=$(awk '/VmPeak/{print $2}' /proc/1/status 2>/dev/null || echo "-1")
     echo "$VMPEAK_KB" > /shared/validator_mem_peak
+    # Write current virtual memory size (KB) for address space leak detection
+    VMSIZE_KB=$(awk '/VmSize/{print $2}' /proc/1/status 2>/dev/null || echo "-1")
+    echo "$VMSIZE_KB" > /shared/validator_vmsize
     # Write count of leaked deleted file descriptors
     DELETED_FDS=$(ls -la /proc/1/fd 2>/dev/null | grep -c '(deleted)' || echo "0")
     echo "$DELETED_FDS" > /shared/validator_deleted_fds
@@ -463,6 +468,16 @@ while true; do
         CORRUPTION_COUNT=$((CORRUPTION_COUNT + COUNT))
     done
     echo "$CORRUPTION_COUNT" > /shared/validator_rocksdb_errors
+    # Write RocksDB LOG file size (bytes) for LOG growth monitoring
+    ROCKSDB_LOG_SIZE=0
+    ROCKSDB_LOG_FILE="/var/ton-work/db/LOG"
+    if [ ! -f "$ROCKSDB_LOG_FILE" ]; then
+        ROCKSDB_LOG_FILE=$(find /var/ton-work/db -maxdepth 2 -name "LOG" -type f 2>/dev/null | head -1)
+    fi
+    if [ -n "$ROCKSDB_LOG_FILE" ] && [ -f "$ROCKSDB_LOG_FILE" ]; then
+        ROCKSDB_LOG_SIZE=$(stat -c%s "$ROCKSDB_LOG_FILE" 2>/dev/null || echo "0")
+    fi
+    echo "$ROCKSDB_LOG_SIZE" > /shared/validator_rocksdb_log_size
     # Write RocksDB compaction event count for compaction health monitoring
     COMPACTION_COUNT=0
     for logf in $ROCKSDB_LOG; do
