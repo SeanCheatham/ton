@@ -164,6 +164,7 @@ echo "1" > /shared/validator_db_perms
 echo "0" > /shared/validator_zombie_count
 echo "-1" > /shared/validator_db_structure
 echo "0" > /shared/validator_keyring_count
+echo "-1" > /shared/validator_keyring_perms
 echo "unknown" > /shared/validator_cmdline_hash
 echo "0" > /shared/validator_db_dir_count
 echo "unknown" > /shared/validator_rocksdb_identity
@@ -365,6 +366,19 @@ while true; do
     # Write keyring file count for cryptographic material integrity monitoring
     KEYRING_COUNT=$(ls /var/ton-work/db/keyring/ 2>/dev/null | wc -l)
     echo "$KEYRING_COUNT" > /shared/validator_keyring_count
+
+    # Check keyring file permissions — private keys should not be world-writable
+    KEYRING_PERMS_OK=1
+    for f in /var/ton-work/db/keyring/*; do
+        [ -e "$f" ] || continue
+        PERMS=$(stat -c '%a' "$f" 2>/dev/null)
+        # Fail if world-write (xx2/xx3/xx6/xx7) or group-write (x2x/x3x/x6x/x7x) or setuid/setgid (>=4xxx)
+        if echo "$PERMS" | grep -qE '[2367]$|.[2367].|^[4-7]'; then
+            KEYRING_PERMS_OK=0
+            break
+        fi
+    done
+    echo "$KEYRING_PERMS_OK" > /shared/validator_keyring_perms
 
     # Check that critical DB files are readable+writable for permission integrity monitoring
     DB_PERM_OK=1

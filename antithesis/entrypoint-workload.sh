@@ -128,6 +128,9 @@ sdk_catalog_always "Validator survives malformed TCP traffic on console port"
 sdk_catalog_always "Validator survives TCP connection flood on all ports"
 sdk_catalog_always "Validator survives slow-drip TCP connections"
 sdk_catalog_always "Validator log does not contain private key material"
+sdk_catalog_always "Validator keyring file permissions are restrictive when healthy"
+sdk_catalog_always "Validator survives rapid TCP reconnection storm"
+sdk_catalog_always "Validator log contains no memory allocation failures"
 echo "Assertion catalog emitted."
 
 # Signal that setup is complete
