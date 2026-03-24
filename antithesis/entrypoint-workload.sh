@@ -131,6 +131,9 @@ sdk_catalog_always "Validator log does not contain private key material"
 sdk_catalog_always "Validator keyring file permissions are restrictive when healthy"
 sdk_catalog_always "Validator survives rapid TCP reconnection storm"
 sdk_catalog_always "Validator log contains no memory allocation failures"
+sdk_catalog_sometimes "All ports reachable after faults settle"
+sdk_catalog_always "Validator thread count meets minimum when healthy"
+sdk_catalog_always "Validator survives oversized UDP payloads"
 echo "Assertion catalog emitted."
 
 # Signal that setup is complete
