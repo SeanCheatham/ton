@@ -123,6 +123,8 @@ sdk_catalog_always "Validator startup time is bounded"
 sdk_catalog_always "Validator listening socket count matches expected"
 sdk_catalog_always "Validator survives malformed ADNL protocol traffic"
 sdk_catalog_always "Validator process is single-threaded-leader stable"
+sdk_catalog_always "Validator survives malformed TCP traffic on liteserver port"
+sdk_catalog_always "Validator survives malformed TCP traffic on console port"
 echo "Assertion catalog emitted."
 
 # Signal that setup is complete
