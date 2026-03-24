@@ -22,6 +22,7 @@ nc -z -w 1 "$VALIDATOR_HOST" 30003 2>/dev/null && lite_up=true
 
 if [[ "$udp_up" != "true" || "$console_up" != "true" || "$lite_up" != "true" ]]; then
     echo "Validator not fully healthy, skipping context switch check"
+    sdk_always true "$PROPERTY" '{"status":"skipped","reason":"validator_not_healthy"}'
     exit 0
 fi
 
@@ -29,6 +30,7 @@ fi
 CURRENT_RAW=$(cat /shared/validator_ctxt_switches 2>/dev/null || echo "")
 if [ -z "$CURRENT_RAW" ]; then
     echo "Context switches file not present yet, skipping"
+    sdk_always true "$PROPERTY" '{"status":"skipped","reason":"file_not_present"}'
     exit 0
 fi
 
@@ -37,11 +39,13 @@ CUR_NONVOL=$(echo "$CURRENT_RAW" | cut -d: -f2)
 
 if [[ "$CUR_VOL" == "-1" || "$CUR_NONVOL" == "-1" ]]; then
     echo "Context switches unavailable, skipping"
+    sdk_always true "$PROPERTY" '{"status":"skipped","reason":"values_unavailable"}'
     exit 0
 fi
 
 if ! [[ "$CUR_VOL" =~ ^[0-9]+$ && "$CUR_NONVOL" =~ ^[0-9]+$ ]]; then
     echo "Invalid context switch values: vol=$CUR_VOL nonvol=$CUR_NONVOL, skipping"
+    sdk_always true "$PROPERTY" '{"status":"skipped","reason":"invalid_values"}'
     exit 0
 fi
 
@@ -51,6 +55,7 @@ echo "$CURRENT_RAW" > "$STATE_FILE"
 
 if [ -z "$PREV_RAW" ]; then
     echo "First observation: vol=$CUR_VOL nonvol=$CUR_NONVOL, skipping comparison"
+    sdk_always true "$PROPERTY" '{"status":"skipped","reason":"first_observation"}'
     exit 0
 fi
 
@@ -59,12 +64,14 @@ PREV_NONVOL=$(echo "$PREV_RAW" | cut -d: -f2)
 
 if ! [[ "$PREV_VOL" =~ ^[0-9]+$ && "$PREV_NONVOL" =~ ^[0-9]+$ ]]; then
     echo "Invalid previous values, resetting baseline"
+    sdk_always true "$PROPERTY" '{"status":"skipped","reason":"invalid_previous"}'
     exit 0
 fi
 
 # Process restart detection: if current < previous, reset
 if [ "$CUR_NONVOL" -lt "$PREV_NONVOL" ]; then
     echo "Context switches decreased (restart?), resetting baseline"
+    sdk_always true "$PROPERTY" '{"status":"skipped","reason":"counter_reset"}'
     exit 0
 fi
 
