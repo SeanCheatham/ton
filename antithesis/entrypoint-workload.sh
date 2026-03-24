@@ -121,6 +121,8 @@ sdk_catalog_always "RocksDB SST file count is non-decreasing when healthy"
 sdk_catalog_sometimes "Validator log shows block processing activity"
 sdk_catalog_always "Validator startup time is bounded"
 sdk_catalog_always "Validator listening socket count matches expected"
+sdk_catalog_always "Validator survives malformed ADNL protocol traffic"
+sdk_catalog_always "Validator process is single-threaded-leader stable"
 echo "Assertion catalog emitted."
 
 # Signal that setup is complete

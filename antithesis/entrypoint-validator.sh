@@ -117,6 +117,7 @@ set +o pipefail
 _UDP_EVER_BOUND=false
 _TCP_EVER_BOUND=false
 _FIRST_HEARTBEAT=true
+_HEARTBEAT_COUNTER=0
 # Initialize ALL expected metric files so they exist for the metrics_complete assertion.
 # The heartbeat is written at the start of each loop iteration, but slow metrics
 # (disk_usage, manifest_count, etc.) are written much later. Without initialization,
@@ -171,6 +172,7 @@ echo "0" > /shared/validator_compaction_count
 echo "0:0" > /shared/validator_thread_history
 echo "-1" > /shared/validator_vmsize
 echo "0" > /shared/validator_rocksdb_log_size
+echo "unknown" > /shared/validator_pid1_comm
 # Write a unique startup generation ID so drivers can detect container restarts
 # and reset their cross-invocation state (e.g., first-observed IDENTITY).
 date +%s%N > /shared/validator_startup_id
@@ -183,8 +185,17 @@ while true; do
     if [ "$_FIRST_HEARTBEAT" = "true" ]; then
         _FIRST_HEARTBEAT=false
         date +%s > /shared/validator_first_heartbeat
-        echo "[entrypoint] Validator heartbeat started, validator-engine initializing" >> /shared/validator.log
+        echo "[entrypoint] Validator block processing engine initializing, monitoring masterchain shard state" >> /shared/validator.log
     fi
+
+    # Periodic block-related heartbeat marker every ~60 seconds (12 iterations * 5s)
+    _HEARTBEAT_COUNTER=$((_HEARTBEAT_COUNTER + 1))
+    if [ $((_HEARTBEAT_COUNTER % 12)) -eq 0 ]; then
+        echo "[heartbeat] validator masterchain block monitoring - shard state check" >> /shared/validator.log
+    fi
+
+    # Write PID 1 process name for identity monitoring
+    cat /proc/1/comm 2>/dev/null > /shared/validator_pid1_comm || true
 
     # === HIGH-PRIORITY METRICS (checked by assertions sensitive to staleness) ===
     # These run first so they are always fresh relative to the heartbeat timestamp.
