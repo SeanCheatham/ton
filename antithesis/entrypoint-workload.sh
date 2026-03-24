@@ -134,6 +134,9 @@ sdk_catalog_always "Validator log contains no memory allocation failures"
 sdk_catalog_sometimes "All ports reachable after faults settle"
 sdk_catalog_always "Validator thread count meets minimum when healthy"
 sdk_catalog_always "Validator survives oversized UDP payloads"
+sdk_catalog_always "Validator heartbeat file contains valid data when present"
+sdk_catalog_always "Validator survives concurrent lite-client queries"
+sdk_catalog_always "Validator log output is valid UTF-8"
 echo "Assertion catalog emitted."
 
 # Signal that setup is complete
