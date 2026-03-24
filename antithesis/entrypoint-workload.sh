@@ -120,6 +120,7 @@ sdk_catalog_sometimes "Lite-client can query validator and get a response"
 sdk_catalog_always "RocksDB SST file count is non-decreasing when healthy"
 sdk_catalog_sometimes "Validator log shows block processing activity"
 sdk_catalog_always "Validator startup time is bounded"
+sdk_catalog_always "Validator listening socket count matches expected"
 echo "Assertion catalog emitted."
 
 # Signal that setup is complete

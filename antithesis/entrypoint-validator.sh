@@ -223,8 +223,11 @@ while true; do
     echo "${DB_MTIME:--1}" > /shared/validator_db_mtime
 
     # Write UDP socket bound status for port 30001 (0x7531 in hex)
+    # Check both /proc/1/net/udp (IPv4) and /proc/1/net/udp6 (IPv6) because
+    # validator-engine may bind UDP to IPv6 (::) which is only visible in udp6.
     if grep -q validator-engine /proc/1/cmdline 2>/dev/null; then
-        UDP_BOUND=$(awk '$2 ~ /:7531$/ {found=1} END {print found+0}' /proc/1/net/udp 2>/dev/null || echo "-1")
+        UDP_BOUND=$(cat /proc/1/net/udp /proc/1/net/udp6 2>/dev/null | awk '$2 ~ /:7531$/ {found=1} END {print found+0}')
+        UDP_BOUND=${UDP_BOUND:-0}
         if [ "$UDP_BOUND" = "1" ]; then
             _UDP_EVER_BOUND=true
             echo "1" > /shared/validator_udp_bound

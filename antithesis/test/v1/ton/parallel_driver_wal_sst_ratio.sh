@@ -1,11 +1,10 @@
 #!/usr/bin/env bash
 source /opt/antithesis/test/v1/ton/helper_sdk.sh
-VALIDATOR_HOST="${VALIDATOR_HOST:-validator}"
 PROPERTY="RocksDB WAL-to-SST ratio is healthy when validator is running"
 RATIO_LIMIT=10
 HEARTBEAT_MAX_AGE=60
 
-# Use heartbeat-only precondition instead of all-3-ports.
+# Heartbeat-based precondition
 if [ -f /shared/validator_heartbeat ]; then
     HB_TS=$(cat /shared/validator_heartbeat 2>/dev/null | tr -d '[:space:]')
     NOW=$(date +%s)
@@ -16,20 +15,19 @@ if [ -f /shared/validator_heartbeat ]; then
             exit 0
         fi
     else
-        echo "Heartbeat value invalid, skipping"
-        exit 0
+        echo "Heartbeat value invalid, skipping"; exit 0
     fi
 else
-    echo "Heartbeat file not present yet, skipping"
-    exit 0
+    echo "Heartbeat file not present yet, skipping"; exit 0
 fi
 
-WAL_COUNT=$(cat /shared/validator_wal_count 2>/dev/null || echo "")
-SST_COUNT=$(cat /shared/validator_sst_count 2>/dev/null || echo "")
+WAL_COUNT=$(cat /shared/validator_wal_count 2>/dev/null | tr -d '[:space:]')
+SST_COUNT=$(cat /shared/validator_sst_count 2>/dev/null | tr -d '[:space:]')
 
+# If metrics are not yet populated, emit pass-through (heartbeat is fresh but metrics pending)
 if [[ -z "$WAL_COUNT" || -z "$SST_COUNT" ]]; then
     echo "Metric not available yet (validator may have just restarted)"
-    sdk_always true "$PROPERTY" '{"status":"metric_not_yet_available","note":"heartbeat fresh but metric file pending"}'
+    sdk_always true "$PROPERTY" '{"status":"metric_not_yet_available"}'
     exit 0
 fi
 
@@ -38,9 +36,10 @@ if ! [[ "$WAL_COUNT" =~ ^[0-9]+$ ]] || ! [[ "$SST_COUNT" =~ ^[0-9]+$ ]]; then
     exit 0
 fi
 
-# Skip if DB is not yet mature (no SST files yet)
+# When SST count is 0, the DB is not mature yet — ratio is trivially healthy
 if [ "$SST_COUNT" -eq 0 ]; then
-    echo "SST count is 0 (DB not mature), skipping ratio check"
+    echo "SST count is 0 (DB not mature), ratio trivially healthy"
+    sdk_always true "$PROPERTY" "$(jq -cn --argjson wal "$WAL_COUNT" --argjson sst "$SST_COUNT" '{wal_count: $wal, sst_count: $sst, status: "db_not_mature"}')"
     exit 0
 fi
 

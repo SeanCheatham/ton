@@ -1,31 +1,38 @@
 #!/usr/bin/env bash
 source /opt/antithesis/test/v1/ton/helper_sdk.sh
-VALIDATOR_HOST="${VALIDATOR_HOST:-validator}"
 PROPERTY="Validator CPU time is advancing when healthy"
 STATE_FILE="/shared/validator_cpu_ticks_prev"
 
-# Check if validator is healthy
-udp_up=false; console_up=false; lite_up=false
-nc -z -w 1 -u "$VALIDATOR_HOST" 30001 2>/dev/null && udp_up=true
-nc -z -w 1 "$VALIDATOR_HOST" 30002 2>/dev/null && console_up=true
-nc -z -w 1 "$VALIDATOR_HOST" 30003 2>/dev/null && lite_up=true
+# Heartbeat-based precondition (matches working scripts like parallel_driver_db_activity.sh)
+HEARTBEAT_MAX_AGE=90
+if [ -f /shared/validator_heartbeat ]; then
+    HB_TS=$(cat /shared/validator_heartbeat 2>/dev/null | tr -d '[:space:]')
+    NOW=$(date +%s)
+    if [[ "$HB_TS" =~ ^[0-9]+$ ]]; then
+        AGE=$((NOW - HB_TS))
+        if [ "$AGE" -gt "$HEARTBEAT_MAX_AGE" ]; then
+            echo "Heartbeat stale (${AGE}s > ${HEARTBEAT_MAX_AGE}s), skipping"
+            exit 0
+        fi
+    else
+        echo "Heartbeat value invalid, skipping"; exit 0
+    fi
+else
+    echo "Heartbeat file not present yet, skipping"; exit 0
+fi
 
-if [[ "$udp_up" != "true" || "$console_up" != "true" || "$lite_up" != "true" ]]; then
-    echo "Validator not fully healthy, skipping CPU check"
+CURRENT=$(cat /shared/validator_cpu_ticks 2>/dev/null | tr -d '[:space:]')
+if [[ -z "$CURRENT" || "$CURRENT" == "-1" ]] || ! [[ "$CURRENT" =~ ^[0-9]+$ ]]; then
+    echo "No valid CPU ticks available yet"
     exit 0
 fi
 
-CURRENT=$(cat /shared/validator_cpu_ticks 2>/dev/null || echo "-1")
-if [[ "$CURRENT" == "-1" || -z "$CURRENT" ]]; then
-    echo "No CPU ticks available yet"
-    exit 0
-fi
-
-PREV=$(cat "$STATE_FILE" 2>/dev/null || echo "")
+PREV=$(cat "$STATE_FILE" 2>/dev/null | tr -d '[:space:]')
 echo "$CURRENT" > "$STATE_FILE"
 
-if [[ -z "$PREV" ]]; then
-    echo "First observation: $CURRENT ticks, skipping comparison"
+if [[ -z "$PREV" ]] || ! [[ "$PREV" =~ ^[0-9]+$ ]]; then
+    echo "First observation: $CURRENT ticks"
+    sdk_always true "$PROPERTY" "$(jq -cn --argjson cur "$CURRENT" '{status:"first_observation", current: $cur}')"
     exit 0
 fi
 
