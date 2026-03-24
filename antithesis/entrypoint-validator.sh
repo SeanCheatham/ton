@@ -182,6 +182,7 @@ while true; do
     # so we guarantee at least one matching line exists for the log_operational assertion.
     if [ "$_FIRST_HEARTBEAT" = "true" ]; then
         _FIRST_HEARTBEAT=false
+        date +%s > /shared/validator_first_heartbeat
         echo "[entrypoint] Validator heartbeat started, validator-engine initializing" >> /shared/validator.log
     fi
 
