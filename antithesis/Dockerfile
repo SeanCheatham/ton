@@ -44,9 +44,9 @@ RUN --mount=type=cache,target=/ton/build \
     cd /ton/build && \
     cmake -GNinja -DCMAKE_BUILD_TYPE=Release -DPORTABLE=1 -DTON_ARCH= -DTON_USE_JEMALLOC=ON \
           -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache .. && \
-    ninja validator-engine generate-random-id && \
+    ninja validator-engine generate-random-id lite-client && \
     mkdir -p /build-out && \
-    cp validator-engine/validator-engine utils/generate-random-id /build-out/
+    cp validator-engine/validator-engine utils/generate-random-id lite-client/lite-client /build-out/
 
 # ---------------------------------------------------------------------------
 # Runtime image: validator-engine (SUT)
@@ -87,6 +87,8 @@ RUN apt-get update && \
 RUN mkdir -p /opt/antithesis/test/v1/ton
 
 COPY antithesis/test/v1/ton/ /opt/antithesis/test/v1/ton/
+
+COPY --from=builder /build-out/lite-client /usr/local/bin/
 
 COPY antithesis/setup-complete.sh /usr/local/bin/setup-complete.sh
 RUN chmod +x /usr/local/bin/setup-complete.sh

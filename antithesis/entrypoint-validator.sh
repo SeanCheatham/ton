@@ -67,6 +67,38 @@ LOCALEOF
     echo "Initialization complete. Config written to ${DB_ROOT}/config.json"
 fi
 
+# Export liteserver config for lite-client usage by the workload container.
+# After initialization, config.json contains the liteserver section with the
+# auto-generated public key. Extract it and write a lite-client-compatible config.
+if [ -f "${DB_ROOT}/config.json" ]; then
+    LITE_KEY=$(jq -r '.liteservers[0].id.key // empty' "${DB_ROOT}/config.json" 2>/dev/null || true)
+    if [ -n "$LITE_KEY" ]; then
+        # lite-client expects a global-config-style JSON with liteserver descriptors.
+        # IP is encoded as a signed 32-bit integer. For the Docker network, the workload
+        # uses the hostname "validator" via -a flag, but we still need the key for auth.
+        # Use 2130706433 (127.0.0.1) as placeholder — workload overrides with -a flag.
+        cat > /shared/liteserver.config.json <<LITEEOF
+{
+    "@type": "config.global",
+    "liteservers": [
+        {
+            "@type": "liteserver.desc",
+            "ip": 2130706433,
+            "port": ${LITE_PORT},
+            "id": {
+                "@type": "pub.ed25519",
+                "key": "${LITE_KEY}"
+            }
+        }
+    ]
+}
+LITEEOF
+        echo "Liteserver config exported to /shared/liteserver.config.json"
+    else
+        echo "Warning: could not extract liteserver key from config.json"
+    fi
+fi
+
 # Start background heartbeat writer — writes epoch timestamp to shared volume
 # every 5 seconds so the workload can detect hangs/deadlocks.
 echo "Starting heartbeat writer..."

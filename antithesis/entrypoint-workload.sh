@@ -116,6 +116,10 @@ sdk_catalog_always "RocksDB LOG file size is bounded when validator is healthy"
 sdk_catalog_always "Validator has no core dump files when healthy"
 sdk_catalog_always "Validator log mtime is fresh when healthy"
 sdk_catalog_always "Validator memory mapping count is bounded when healthy"
+sdk_catalog_sometimes "Lite-client can query validator and get a response"
+sdk_catalog_always "RocksDB SST file count is non-decreasing when healthy"
+sdk_catalog_sometimes "Validator log shows block processing activity"
+sdk_catalog_always "Validator startup time is bounded"
 echo "Assertion catalog emitted."
 
 # Signal that setup is complete
