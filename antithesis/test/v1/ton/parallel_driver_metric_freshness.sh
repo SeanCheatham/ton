@@ -86,25 +86,27 @@ if [ "$FILE_COUNT" -lt 2 ]; then
 fi
 
 SPREAD=$((MAX_MTIME - MIN_MTIME))
-# Threshold must accommodate the full heartbeat loop duration.
-# The loop includes multiple slow operations (du -sb, find, jq, grep)
-# that can each take 10-30s under fault injection I/O delays.
-# Under heavy fault injection, the full loop can take 3-5 minutes due to
-# I/O stalls on filesystem operations (du, find, stat, jq). 300s is generous
-# enough to avoid false positives while still detecting truly stuck loops.
-THRESHOLD=300
+# Check max age of the OLDEST metric file relative to NOW.
+# This is more robust than mtime spread because the heartbeat loop is long
+# (50+ metrics with slow du/find/grep operations) and can take 5+ minutes
+# under fault injection I/O delays. Spread-based checks penalize a healthy
+# but slow loop iteration. Age-based checks only fail when files are truly
+# stale — i.e., the loop hasn't completed a full iteration within the threshold.
+# 600s (10 minutes) accommodates even severely I/O-delayed loop iterations.
+MAX_AGE=$((NOW - MIN_MTIME))
+THRESHOLD=600
 
-if [ "$SPREAD" -le "$THRESHOLD" ]; then
-    echo "PASS: Metric file mtime spread is ${SPREAD}s across ${FILE_COUNT} files (threshold: ${THRESHOLD}s)"
-    DETAILS=$(jq -cn --argjson spread "$SPREAD" --argjson threshold "$THRESHOLD" \
+if [ "$MAX_AGE" -le "$THRESHOLD" ]; then
+    echo "PASS: Oldest metric file age is ${MAX_AGE}s (spread=${SPREAD}s) across ${FILE_COUNT} files (threshold: ${THRESHOLD}s)"
+    DETAILS=$(jq -cn --argjson max_age "$MAX_AGE" --argjson spread "$SPREAD" --argjson threshold "$THRESHOLD" \
         --argjson file_count "$FILE_COUNT" --arg oldest "$OLDEST_FILE" --arg newest "$NEWEST_FILE" \
-        '{mtime_spread_seconds: $spread, threshold: $threshold, file_count: $file_count, oldest_file: $oldest, newest_file: $newest}')
+        '{max_age_seconds: $max_age, mtime_spread_seconds: $spread, threshold: $threshold, file_count: $file_count, oldest_file: $oldest, newest_file: $newest}')
     sdk_always true "${ASSERTION_NAME}" "$DETAILS"
 else
-    echo "FAIL: Metric file mtime spread is ${SPREAD}s (threshold: ${THRESHOLD}s), oldest=${OLDEST_FILE}, newest=${NEWEST_FILE}"
-    DETAILS=$(jq -cn --argjson spread "$SPREAD" --argjson threshold "$THRESHOLD" \
+    echo "FAIL: Oldest metric file age is ${MAX_AGE}s (threshold: ${THRESHOLD}s), oldest=${OLDEST_FILE}, newest=${NEWEST_FILE}"
+    DETAILS=$(jq -cn --argjson max_age "$MAX_AGE" --argjson spread "$SPREAD" --argjson threshold "$THRESHOLD" \
         --argjson file_count "$FILE_COUNT" --arg oldest "$OLDEST_FILE" --arg newest "$NEWEST_FILE" \
-        '{mtime_spread_seconds: $spread, threshold: $threshold, file_count: $file_count, oldest_file: $oldest, newest_file: $newest}')
+        '{max_age_seconds: $max_age, mtime_spread_seconds: $spread, threshold: $threshold, file_count: $file_count, oldest_file: $oldest, newest_file: $newest}')
     sdk_always false "${ASSERTION_NAME}" "$DETAILS"
 fi
 

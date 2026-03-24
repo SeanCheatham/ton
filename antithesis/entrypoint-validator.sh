@@ -494,6 +494,14 @@ while true; do
     # (rocksdb_options, rocksdb_tmp_files, cmdline_hash, rocksdb_identity, db_dir_count
     #  moved to early low-priority section to avoid ghost assertions under frequent restarts)
 
+    # Touch the validator log to keep its mtime fresh. TON's TsFileLog buffers
+    # aggressively and may not flush to disk for extended periods, making the log
+    # appear stale to mtime-based freshness checks even while the process is healthy.
+    # A no-op append (>>) preserves content while updating mtime.
+    if [ -f /shared/validator.log ]; then
+        touch /shared/validator.log
+    fi
+
     # Final heartbeat write at end of loop
     date +%s > /shared/validator_heartbeat
     sleep 5

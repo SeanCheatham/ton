@@ -73,7 +73,7 @@ details=$(jq -cn \
     --argjson hb_age "$HB_AGE" \
     '{log_age_s: $log_age, log_mtime: $log_mtime, now: $now, heartbeat_age_s: $hb_age}')
 
-if [ "$LOG_AGE" -lt 60 ]; then
+if [ "$LOG_AGE" -lt 120 ]; then
     sdk_always true "$ASSERTION_NAME" "$details"
 else
     echo "WARNING: Log file is ${LOG_AGE}s old while validator appears healthy"

@@ -61,8 +61,8 @@ echo "  Current RocksDB identity: ${current_identity}"
 # Detect container restarts via startup generation marker.
 # If the validator restarted, RocksDB legitimately creates a new IDENTITY.
 # Reset the baseline when we detect a new startup generation.
-current_startup=$(cat "$STARTUP_FILE" 2>/dev/null | tr -d '[:space:]')
-saved_startup=$(cat "$STARTUP_SNAP" 2>/dev/null | tr -d '[:space:]')
+current_startup=$( (cat "$STARTUP_FILE" 2>/dev/null || true) | tr -d '[:space:]')
+saved_startup=$( (cat "$STARTUP_SNAP" 2>/dev/null || true) | tr -d '[:space:]')
 
 if [[ -n "$current_startup" ]] && [[ "$current_startup" != "$saved_startup" ]]; then
     echo "  New validator lifecycle detected (startup=$current_startup), resetting baseline"
