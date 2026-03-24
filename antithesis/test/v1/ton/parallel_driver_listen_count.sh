@@ -1,14 +1,19 @@
 #!/usr/bin/env bash
 
 # Parallel driver: Validator listening socket count matches expected
-# When healthy, the validator should have exactly:
-# - 2 TCP LISTEN sockets (port 30002 console, port 30003 liteserver)
-# - 1 UDP socket (port 30001 P2P)
-# Fewer = subsystem failed to bind; more = unexpected service or leak.
+# When healthy, the validator should have all 3 expected ports reachable:
+# - TCP:30002 (console)
+# - TCP:30003 (liteserver)
+# - UDP:30001 (P2P)
+#
+# NOTE: This script runs in the workload container, so it cannot read the
+# validator's /proc/net/tcp. Instead it probes ports via nc and reads
+# the validator's metric files from /shared/.
 
 source "$(dirname "$0")/helper_sdk.sh"
 
 ASSERTION_NAME="Validator listening socket count matches expected"
+VALIDATOR_HOST="${VALIDATOR_HOST:-validator}"
 HEARTBEAT_MAX_AGE=60
 
 # Precondition: heartbeat must be fresh
@@ -28,56 +33,50 @@ else
     echo "Heartbeat file not present yet, skipping"; exit 0
 fi
 
-# Read TCP LISTEN sockets (state 0A = LISTEN in /proc/net/tcp)
-# Check both IPv4 and IPv6 (validator may bind to :: which creates dual-stack sockets)
-TCP_LISTEN=0
-if [ -f /proc/net/tcp ] || [ -f /proc/net/tcp6 ]; then
-    # Count unique LISTEN entries matching our expected ports (7532=30002, 7533=30003)
-    TCP_DATA=$(cat /proc/net/tcp /proc/net/tcp6 2>/dev/null)
-    TCP_LISTEN=$(echo "$TCP_DATA" | awk '$4 == "0A" {count++} END {print count+0}')
-    # Count specifically our expected ports
-    TCP_7532=$(echo "$TCP_DATA" | awk '$2 ~ /:7532$/ && $4 == "0A" {count++} END {print count+0}')
-    TCP_7533=$(echo "$TCP_DATA" | awk '$2 ~ /:7533$/ && $4 == "0A" {count++} END {print count+0}')
-else
-    echo "/proc/net/tcp not available, skipping"
-    exit 0
-fi
+# Probe each expected port from the workload container
+console_up=0
+lite_up=0
+udp_up=0
 
-# Read UDP sockets
-UDP_7531=0
-if [ -f /proc/net/udp ] || [ -f /proc/net/udp6 ]; then
-    UDP_7531=$(cat /proc/net/udp /proc/net/udp6 2>/dev/null | awk '$2 ~ /:7531$/ {count++} END {print count+0}')
-else
-    echo "/proc/net/udp not available, skipping"
-    exit 0
-fi
+nc -z -w 2 "${VALIDATOR_HOST}" 30002 2>/dev/null && console_up=1
+nc -z -w 2 "${VALIDATOR_HOST}" 30003 2>/dev/null && lite_up=1
+nc -z -w 2 -u "${VALIDATOR_HOST}" 30001 2>/dev/null && udp_up=1
 
-# Verify: console port (7532) listening, liteserver port (7533) listening, UDP (7531) bound
+# Also cross-check with validator-written metric files (written from inside
+# the validator container where /proc/net/tcp IS the validator's)
+TCP_BOUND=$(cat /shared/validator_tcp_bound 2>/dev/null | tr -d '[:space:]')
+UDP_BOUND=$(cat /shared/validator_udp_bound 2>/dev/null | tr -d '[:space:]')
+
+# Use nc probe as primary signal; metric files as supplementary
+LISTEN_COUNT=$((console_up + lite_up + udp_up))
+
 PASS=true
 REASON=""
 
-if [ "$TCP_7532" -eq 0 ]; then
+if [ "$console_up" -eq 0 ]; then
     PASS=false
-    REASON="console_port_not_listening"
+    REASON="console_port_30002_not_reachable"
 fi
-if [ "$TCP_7533" -eq 0 ]; then
+if [ "$lite_up" -eq 0 ]; then
     PASS=false
-    REASON="${REASON:+${REASON},}liteserver_port_not_listening"
+    REASON="${REASON:+${REASON},}liteserver_port_30003_not_reachable"
 fi
-if [ "$UDP_7531" -eq 0 ]; then
+if [ "$udp_up" -eq 0 ]; then
     PASS=false
-    REASON="${REASON:+${REASON},}udp_port_not_bound"
+    REASON="${REASON:+${REASON},}udp_port_30001_not_reachable"
 fi
 
 DETAILS=$(jq -cn \
-    --argjson tcp_listen "$TCP_LISTEN" \
-    --argjson tcp_7532 "$TCP_7532" \
-    --argjson tcp_7533 "$TCP_7533" \
-    --argjson udp_7531 "$UDP_7531" \
-    '{tcp_listen_total: $tcp_listen, console_30002: $tcp_7532, liteserver_30003: $tcp_7533, udp_30001: $udp_7531}')
+    --argjson console_up "$console_up" \
+    --argjson lite_up "$lite_up" \
+    --argjson udp_up "$udp_up" \
+    --argjson listen_count "$LISTEN_COUNT" \
+    --arg tcp_bound "${TCP_BOUND:--1}" \
+    --arg udp_bound "${UDP_BOUND:--1}" \
+    '{listen_count: $listen_count, console_30002: $console_up, liteserver_30003: $lite_up, udp_30001: $udp_up, validator_tcp_bound: $tcp_bound, validator_udp_bound: $udp_bound}')
 
 if [ "$PASS" = "true" ]; then
-    echo "PASS: All expected listening sockets found ($DETAILS)"
+    echo "PASS: All 3 expected listening sockets reachable ($DETAILS)"
     sdk_always true "$ASSERTION_NAME" "$DETAILS"
 else
     echo "FAIL: Missing expected sockets: $REASON ($DETAILS)"
