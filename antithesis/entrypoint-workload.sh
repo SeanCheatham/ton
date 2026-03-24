@@ -139,6 +139,8 @@ sdk_catalog_always "Validator survives concurrent lite-client queries"
 sdk_catalog_always "Validator log output is valid UTF-8"
 sdk_catalog_always "Validator initial state is valid before faults"
 sdk_catalog_always "Validator config file content is stable over time"
+sdk_catalog_always "Validator environment configuration is stable"
+sdk_catalog_always "Validator survives partial ADNL handshake flood"
 echo "Assertion catalog emitted."
 
 # Signal that setup is complete

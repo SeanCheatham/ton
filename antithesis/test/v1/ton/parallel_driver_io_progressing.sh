@@ -26,18 +26,24 @@ if [ -f /shared/validator_heartbeat ]; then
         AGE=$((NOW - HB_TS))
         if [ "$AGE" -gt "$HEARTBEAT_MAX_AGE" ]; then
             echo "Heartbeat stale (${AGE}s > ${HEARTBEAT_MAX_AGE}s), skipping"
+            sdk_always true "$ASSERTION_NAME" '{"status":"skipped","reason":"heartbeat_stale"}'
             sleep 5; exit 0
         fi
     else
-        echo "Heartbeat value invalid, skipping"; sleep 5; exit 0
+        echo "Heartbeat value invalid, skipping"
+        sdk_always true "$ASSERTION_NAME" '{"status":"skipped","reason":"heartbeat_invalid"}'
+        sleep 5; exit 0
     fi
 else
-    echo "Heartbeat file not present yet, skipping"; sleep 5; exit 0
+    echo "Heartbeat file not present yet, skipping"
+    sdk_always true "$ASSERTION_NAME" '{"status":"skipped","reason":"heartbeat_missing"}'
+    sleep 5; exit 0
 fi
 
 # Read I/O bytes from shared volume
 if [ ! -f /shared/validator_io_bytes ]; then
     echo "I/O bytes file not present yet, skipping"
+    sdk_always true "$ASSERTION_NAME" '{"status":"skipped","reason":"io_file_missing"}'
     sleep 10
     exit 0
 fi
@@ -46,12 +52,14 @@ CURRENT=$(cat /shared/validator_io_bytes 2>/dev/null | tr -d '[:space:]')
 
 if [ -z "$CURRENT" ] || ! [[ "$CURRENT" =~ ^-?[0-9]+$ ]]; then
     echo "Invalid I/O bytes value: '$CURRENT', skipping"
+    sdk_always true "$ASSERTION_NAME" '{"status":"skipped","reason":"invalid_value"}'
     sleep 10
     exit 0
 fi
 
 if [ "$CURRENT" -lt 0 ]; then
     echo "I/O bytes unavailable ($CURRENT), skipping"
+    sdk_always true "$ASSERTION_NAME" '{"status":"skipped","reason":"io_unavailable"}'
     sleep 10
     exit 0
 fi
@@ -61,12 +69,14 @@ echo "$CURRENT" > "$STATE_FILE"
 
 if [ -z "$PREV" ]; then
     echo "First observation: ${CURRENT} bytes, storing baseline"
+    sdk_always true "$ASSERTION_NAME" '{"status":"skipped","reason":"first_observation"}'
     sleep 10
     exit 0
 fi
 
 if ! [[ "$PREV" =~ ^[0-9]+$ ]]; then
     echo "Invalid previous value: '$PREV', resetting baseline"
+    sdk_always true "$ASSERTION_NAME" '{"status":"skipped","reason":"invalid_previous"}'
     sleep 10
     exit 0
 fi
@@ -86,6 +96,7 @@ else
     # CURRENT < PREV indicates process restart (counters reset) or file-read race.
     # Reset baseline rather than failing.
     echo "I/O bytes decreased (prev=${PREV}, cur=${CURRENT}) — likely process restart, resetting baseline"
+    sdk_always true "$ASSERTION_NAME" '{"status":"skipped","reason":"counter_reset"}'
     sleep 10
     exit 0
 fi
