@@ -176,6 +176,7 @@ echo "-1" > /shared/validator_vmsize
 echo "0" > /shared/validator_rocksdb_log_size
 echo "unknown" > /shared/validator_pid1_comm
 echo "unknown" > /shared/validator_nice
+echo "-1" > /shared/validator_syscall_count
 # Write a unique startup generation ID so drivers can detect container restarts
 # and reset their cross-invocation state (e.g., first-observed IDENTITY).
 date +%s%N > /shared/validator_startup_id

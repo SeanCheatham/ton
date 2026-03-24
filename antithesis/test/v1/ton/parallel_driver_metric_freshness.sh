@@ -69,6 +69,7 @@ for f in /shared/validator_*; do
         validator_first_heartbeat) continue ;;
         validator_prev_udp|validator_prev_console|validator_prev_lite) continue ;;
         validator_heartbeat_prev_fresh) continue ;;
+        validator_nice_initial) continue ;;
     esac
     MTIME=$(stat -c %Y "$f" 2>/dev/null || continue)
     FILE_COUNT=$((FILE_COUNT + 1))
