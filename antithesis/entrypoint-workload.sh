@@ -125,6 +125,9 @@ sdk_catalog_always "Validator survives malformed ADNL protocol traffic"
 sdk_catalog_always "Validator process is single-threaded-leader stable"
 sdk_catalog_always "Validator survives malformed TCP traffic on liteserver port"
 sdk_catalog_always "Validator survives malformed TCP traffic on console port"
+sdk_catalog_always "Validator survives TCP connection flood on all ports"
+sdk_catalog_always "Validator survives slow-drip TCP connections"
+sdk_catalog_always "Validator log does not contain private key material"
 echo "Assertion catalog emitted."
 
 # Signal that setup is complete
