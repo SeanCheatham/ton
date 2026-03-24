@@ -317,6 +317,9 @@ while true; do
     # Write combined read_bytes + write_bytes from /proc/1/io for I/O throughput monitoring
     IO_BYTES=$(awk '/^(read_bytes|write_bytes):/{s+=$2} END{print s+0}' /proc/1/io 2>/dev/null || echo "-1")
     echo "$IO_BYTES" > /shared/validator_io_bytes
+    # Write combined syscr + syscw from /proc/1/io for syscall activity monitoring
+    SYSCALL_COUNT=$(awk '/^(syscr|syscw):/{s+=$2} END{print s+0}' /proc/1/io 2>/dev/null || echo "-1")
+    echo "$SYSCALL_COUNT" > /shared/validator_syscall_count
     # Write count of unexpected file descriptor types
     UNEXPECTED_FDS=0
     for link in /proc/1/fd/*; do

@@ -143,6 +143,8 @@ sdk_catalog_always "Validator environment configuration is stable"
 sdk_catalog_always "Validator survives partial ADNL handshake flood"
 sdk_catalog_always "Validator survives simultaneous multi-port adversarial traffic"
 sdk_catalog_always "Validator process scheduling priority is stable when healthy"
+sdk_catalog_always "Validator survives time-bomb TCP connections"
+sdk_catalog_always "Validator syscall I/O counts are advancing when healthy"
 echo "Assertion catalog emitted."
 
 # Signal that setup is complete
