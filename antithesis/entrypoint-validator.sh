@@ -175,6 +175,7 @@ echo "0:0" > /shared/validator_thread_history
 echo "-1" > /shared/validator_vmsize
 echo "0" > /shared/validator_rocksdb_log_size
 echo "unknown" > /shared/validator_pid1_comm
+echo "unknown" > /shared/validator_nice
 # Write a unique startup generation ID so drivers can detect container restarts
 # and reset their cross-invocation state (e.g., first-observed IDENTITY).
 date +%s%N > /shared/validator_startup_id
@@ -293,6 +294,10 @@ while true; do
     # Write current virtual memory size (KB) for address space leak detection
     VMSIZE_KB=$(awk '/VmSize/{print $2}' /proc/1/status 2>/dev/null || echo "-1")
     echo "$VMSIZE_KB" > /shared/validator_vmsize
+    # Write process nice value for scheduling priority stability monitoring
+    # Field 19 of /proc/1/stat (1-indexed) is the nice value
+    NICE_VAL=$(awk '{print $19}' /proc/1/stat 2>/dev/null || echo "unknown")
+    echo "$NICE_VAL" > /shared/validator_nice
     # Write count of leaked deleted file descriptors
     DELETED_FDS=$(ls -la /proc/1/fd 2>/dev/null | grep -c '(deleted)' || echo "0")
     echo "$DELETED_FDS" > /shared/validator_deleted_fds

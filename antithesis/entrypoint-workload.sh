@@ -141,6 +141,8 @@ sdk_catalog_always "Validator initial state is valid before faults"
 sdk_catalog_always "Validator config file content is stable over time"
 sdk_catalog_always "Validator environment configuration is stable"
 sdk_catalog_always "Validator survives partial ADNL handshake flood"
+sdk_catalog_always "Validator survives simultaneous multi-port adversarial traffic"
+sdk_catalog_always "Validator process scheduling priority is stable when healthy"
 echo "Assertion catalog emitted."
 
 # Signal that setup is complete
