@@ -168,6 +168,7 @@ echo "-1" > /shared/validator_keyring_perms
 echo "unknown" > /shared/validator_cmdline_hash
 echo "0" > /shared/validator_db_dir_count
 echo "unknown" > /shared/validator_rocksdb_identity
+echo "unavailable" > /shared/validator_config_hash
 echo "0" > /shared/validator_manifest_size
 echo "0" > /shared/validator_compaction_count
 echo "0:0" > /shared/validator_thread_history
@@ -457,6 +458,8 @@ while true; do
     else
         echo "-1" > /shared/validator_config_valid
     fi
+    # Write config.json content hash for stability monitoring
+    md5sum /var/ton-work/db/config.json 2>/dev/null | awk '{print $1}' > /shared/validator_config_hash || echo "unavailable" > /shared/validator_config_hash
     # Write config.json structural keys for structural integrity monitoring
     if [ -f "/var/ton-work/db/config.json" ]; then
         jq -r 'keys | join(",")' /var/ton-work/db/config.json > /shared/validator_config_keys 2>/dev/null || echo "error" > /shared/validator_config_keys

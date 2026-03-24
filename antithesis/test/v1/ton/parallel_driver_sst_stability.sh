@@ -17,25 +17,32 @@ if [ -f /shared/validator_heartbeat ]; then
         AGE=$((NOW - HB_TS))
         if [ "$AGE" -gt "$HEARTBEAT_MAX_AGE" ]; then
             echo "Heartbeat stale (${AGE}s), skipping"
+            sdk_always true "$ASSERTION_NAME" '{"status":"heartbeat_stale"}'
             exit 0
         fi
     else
-        echo "Heartbeat value invalid, skipping"; exit 0
+        echo "Heartbeat value invalid, skipping"
+        sdk_always true "$ASSERTION_NAME" '{"status":"heartbeat_invalid"}'
+        exit 0
     fi
 else
-    echo "Heartbeat file not present yet, skipping"; exit 0
+    echo "Heartbeat file not present yet, skipping"
+    sdk_always true "$ASSERTION_NAME" '{"status":"heartbeat_not_present"}'
+    exit 0
 fi
 
 # Read current SST count
 SST_COUNT=$(cat /shared/validator_sst_count 2>/dev/null | tr -d '[:space:]')
 if ! [[ "$SST_COUNT" =~ ^[0-9]+$ ]]; then
     echo "SST count metric not available or invalid, skipping"
+    sdk_always true "$ASSERTION_NAME" '{"status":"metric_not_available"}'
     exit 0
 fi
 
 # Skip if SST_COUNT is 0 (DB not mature enough — no SST files yet)
 if [ "$SST_COUNT" -eq 0 ]; then
     echo "SST count is 0 (DB not mature), skipping"
+    sdk_always true "$ASSERTION_NAME" '{"status":"db_not_mature","sst_count":0}'
     exit 0
 fi
 

@@ -10,6 +10,11 @@ source "${SCRIPT_DIR}/helper_sdk.sh"
 ASSERTION_NAME="Validator is alive during parallel driver phase"
 HEARTBEAT_MAX_AGE=30
 
+# Ensure catalog entry is emitted from within the driver script itself.
+# The entrypoint also catalogs this, but emitting it here guarantees the
+# assertion appears in snouty even if the entrypoint catalog was missed.
+sdk_catalog_sometimes "$ASSERTION_NAME"
+
 if [ -f /shared/validator_heartbeat ]; then
     HB_TS=$(cat /shared/validator_heartbeat 2>/dev/null | tr -d '[:space:]')
     NOW=$(date +%s)

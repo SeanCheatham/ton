@@ -20,30 +20,38 @@ if [ -f /shared/validator_heartbeat ]; then
         AGE=$((NOW - HB_TS))
         if [ "$AGE" -gt "$HEARTBEAT_MAX_AGE" ]; then
             echo "Heartbeat stale (${AGE}s), skipping"
+            sdk_always true "$ASSERTION_NAME" '{"status":"heartbeat_stale"}'
             exit 0
         fi
     else
-        echo "Heartbeat value invalid, skipping"; exit 0
+        echo "Heartbeat value invalid, skipping"
+        sdk_always true "$ASSERTION_NAME" '{"status":"heartbeat_invalid"}'
+        exit 0
     fi
 else
-    echo "Heartbeat file not present yet, skipping"; exit 0
+    echo "Heartbeat file not present yet, skipping"
+    sdk_always true "$ASSERTION_NAME" '{"status":"heartbeat_not_present"}'
+    exit 0
 fi
 
 # Precondition: liteserver port must be reachable
 if ! nc -z -w 2 "${VALIDATOR_HOST}" "${LITE_PORT}" 2>/dev/null; then
     echo "Liteserver port ${LITE_PORT} not reachable, skipping"
+    sdk_always true "$ASSERTION_NAME" '{"status":"port_not_reachable"}'
     exit 0
 fi
 
 # Precondition: liteserver config must exist
 if [ ! -f /shared/liteserver.config.json ]; then
     echo "Liteserver config not available yet, skipping"
+    sdk_always true "$ASSERTION_NAME" '{"status":"config_not_available"}'
     exit 0
 fi
 
 # Precondition: lite-client binary must exist
 if ! command -v lite-client >/dev/null 2>&1; then
     echo "lite-client binary not found, skipping"
+    sdk_always true "$ASSERTION_NAME" '{"status":"lite_client_not_available"}'
     exit 0
 fi
 

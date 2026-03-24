@@ -26,14 +26,17 @@ if [ -f /shared/validator_heartbeat ]; then
         AGE=$((NOW - HB_TS))
         if [ "$AGE" -gt "$HEARTBEAT_MAX_AGE" ]; then
             echo "Heartbeat stale (${AGE}s > ${HEARTBEAT_MAX_AGE}s), skipping"
+            sdk_always true "$ASSERTION_NAME" '{"status":"heartbeat_stale"}'
             exit 0
         fi
     else
         echo "Heartbeat value invalid, skipping"
+        sdk_always true "$ASSERTION_NAME" '{"status":"heartbeat_invalid"}'
         exit 0
     fi
 else
     echo "Heartbeat file not present yet, skipping"
+    sdk_always true "$ASSERTION_NAME" '{"status":"heartbeat_not_present"}'
     exit 0
 fi
 
@@ -48,6 +51,7 @@ mapfile -t ENTRIES < <(tail -"$MIN_ENTRIES" /shared/validator_thread_history 2>/
 
 if [ ${#ENTRIES[@]} -lt "$MIN_ENTRIES" ]; then
     echo "Insufficient data points (${#ENTRIES[@]}/${MIN_ENTRIES}), skipping"
+    sdk_always true "$ASSERTION_NAME" '{"status":"insufficient_data"}'
     exit 0
 fi
 
@@ -62,6 +66,7 @@ done
 
 if [ ${#THREAD_VALUES[@]} -lt "$MIN_ENTRIES" ]; then
     echo "Insufficient valid thread values, skipping"
+    sdk_always true "$ASSERTION_NAME" '{"status":"insufficient_valid_values"}'
     exit 0
 fi
 

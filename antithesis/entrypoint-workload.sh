@@ -137,6 +137,8 @@ sdk_catalog_always "Validator survives oversized UDP payloads"
 sdk_catalog_always "Validator heartbeat file contains valid data when present"
 sdk_catalog_always "Validator survives concurrent lite-client queries"
 sdk_catalog_always "Validator log output is valid UTF-8"
+sdk_catalog_always "Validator initial state is valid before faults"
+sdk_catalog_always "Validator config file content is stable over time"
 echo "Assertion catalog emitted."
 
 # Signal that setup is complete

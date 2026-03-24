@@ -14,12 +14,14 @@ LOG_FILE="/shared/validator.log"
 # Precondition: log file must exist
 if [ ! -f "$LOG_FILE" ]; then
     echo "Log file not present yet, skipping"
+    sdk_always true "$ASSERTION_NAME" '{"status":"log_not_present"}'
     exit 0
 fi
 
 LOG_LINES=$(wc -l < "$LOG_FILE" 2>/dev/null || echo "0")
 if [ "$LOG_LINES" -lt 21 ]; then
     echo "Log file too short (${LOG_LINES} lines), skipping"
+    sdk_always true "$ASSERTION_NAME" "$(jq -cn --argjson lines "$LOG_LINES" '{status:"log_too_short", lines: $lines}')"
     exit 0
 fi
 

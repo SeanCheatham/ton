@@ -12,18 +12,24 @@ if [ -f /shared/validator_heartbeat ]; then
         AGE=$((NOW - HB_TS))
         if [ "$AGE" -gt "$HEARTBEAT_MAX_AGE" ]; then
             echo "Heartbeat stale (${AGE}s > ${HEARTBEAT_MAX_AGE}s), skipping"
+            sdk_always true "$PROPERTY" '{"status":"heartbeat_stale"}'
             exit 0
         fi
     else
-        echo "Heartbeat value invalid, skipping"; exit 0
+        echo "Heartbeat value invalid, skipping"
+        sdk_always true "$PROPERTY" '{"status":"heartbeat_invalid"}'
+        exit 0
     fi
 else
-    echo "Heartbeat file not present yet, skipping"; exit 0
+    echo "Heartbeat file not present yet, skipping"
+    sdk_always true "$PROPERTY" '{"status":"heartbeat_not_present"}'
+    exit 0
 fi
 
 CURRENT=$(cat /shared/validator_cpu_ticks 2>/dev/null | tr -d '[:space:]')
 if [[ -z "$CURRENT" || "$CURRENT" == "-1" ]] || ! [[ "$CURRENT" =~ ^[0-9]+$ ]]; then
     echo "No valid CPU ticks available yet"
+    sdk_always true "$PROPERTY" '{"status":"metric_not_available"}'
     exit 0
 fi
 
@@ -43,6 +49,7 @@ elif [ "$CURRENT" -eq "$PREV" ]; then
     # Heartbeat updates every 5s — the driver may run faster than that.
     # Equal ticks are inconclusive, not a failure.
     echo "CPU ticks unchanged ($CURRENT), heartbeat may not have refreshed yet — skipping"
+    sdk_always true "$PROPERTY" "$(jq -cn --argjson cur "$CURRENT" '{status:"unchanged", current: $cur}')"
     exit 0
 else
     # CURRENT < PREV indicates a process restart (PID 1 replaced, CPU counters
@@ -50,5 +57,6 @@ else
     # bug — reset the baseline so the next invocation compares within the new
     # process lifecycle.
     echo "CPU ticks decreased (prev=$PREV, cur=$CURRENT) — likely process restart, resetting baseline"
+    sdk_always true "$PROPERTY" "$(jq -cn --argjson prev "$PREV" --argjson cur "$CURRENT" '{status:"restart_detected", prev: $prev, current: $cur}')"
     exit 0
 fi
