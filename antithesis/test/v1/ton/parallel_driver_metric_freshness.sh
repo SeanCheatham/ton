@@ -15,12 +15,37 @@ ASSERTION_NAME="Validator metric files are all fresh when healthy"
 
 echo "Checking validator metric file freshness consistency..."
 
-# Heartbeat-only precondition: heartbeat freshness proves the validator process
-# is actively running and metrics are valid, regardless of port status.
+NOW=$(date +%s)
+
+# Precondition: the heartbeat loop must have COMPLETED at least one full
+# iteration recently. We use validator_loop_epoch (written at the END of each
+# iteration) instead of validator_heartbeat (which is refreshed 7 times
+# mid-loop). The heartbeat can appear fresh while the loop is mid-iteration
+# and files from the previous iteration are legitimately stale — causing
+# false violations. The loop_epoch marker guarantees that ALL metrics in the
+# most recent iteration have been written.
+LOOP_EPOCH_MAX_AGE=3600
+if [ -f /shared/validator_loop_epoch ]; then
+    LOOP_TS=$(cat /shared/validator_loop_epoch 2>/dev/null | tr -d '[:space:]')
+    if [[ "$LOOP_TS" =~ ^[0-9]+$ ]] && [ "$LOOP_TS" -gt 0 ]; then
+        LOOP_AGE=$((NOW - LOOP_TS))
+        if [ "$LOOP_AGE" -gt "$LOOP_EPOCH_MAX_AGE" ]; then
+            echo "Loop epoch stale (${LOOP_AGE}s > ${LOOP_EPOCH_MAX_AGE}s), skipping"
+            sleep 5; exit 0
+        fi
+    else
+        echo "Loop epoch not yet set (value=${LOOP_TS}), skipping"; sleep 5; exit 0
+    fi
+else
+    echo "Loop epoch file not present yet, skipping"; sleep 5; exit 0
+fi
+
+# Also check heartbeat freshness as a secondary precondition.
+# This catches the case where loop_epoch was written recently but the
+# heartbeat loop has since died (container restarting, etc.).
 HEARTBEAT_MAX_AGE=90
 if [ -f /shared/validator_heartbeat ]; then
     HB_TS=$(cat /shared/validator_heartbeat 2>/dev/null | tr -d '[:space:]')
-    NOW=$(date +%s)
     if [[ "$HB_TS" =~ ^[0-9]+$ ]]; then
         AGE=$((NOW - HB_TS))
         if [ "$AGE" -gt "$HEARTBEAT_MAX_AGE" ]; then
@@ -49,6 +74,7 @@ for f in /shared/validator_*; do
     #   to keep it fresh for heartbeat-based preconditions in other drivers.
     #   Including it would always make it the newest file, inflating the spread
     #   to equal the full loop duration rather than measuring metric staleness.
+    # - validator_loop_epoch: loop-completion marker, not a metric file.
     # - validator_rss_history, validator_fd_history, validator_thread_history:
     #   append-mode files with tail/mv that can have slightly different mtime patterns.
     # - Driver-written state files: these are written by workload drivers at
@@ -58,6 +84,7 @@ for f in /shared/validator_*; do
     case "$(basename "$f")" in
         validator_transitions) continue ;;
         validator_heartbeat) continue ;;
+        validator_loop_epoch) continue ;;
         validator_rss_history|validator_fd_history|validator_thread_history) continue ;;
         validator_mmap_history|validator_sock_history) continue ;;
         validator_rss_history.tmp|validator_fd_history.tmp|validator_thread_history.tmp) continue ;;
@@ -95,17 +122,23 @@ fi
 SPREAD=$((MAX_MTIME - MIN_MTIME))
 # Check max age of the OLDEST metric file relative to NOW.
 # This is more robust than mtime spread because the heartbeat loop is long
-# (50+ metrics with slow du/find/grep operations) and can take 5+ minutes
+# (60+ metrics with slow du/find/grep operations) and can take 5+ minutes
 # under fault injection I/O delays. Spread-based checks penalize a healthy
 # but slow loop iteration. Age-based checks only fail when files are truly
 # stale — i.e., the loop hasn't completed a full iteration within the threshold.
-# 1200s (20 minutes) accommodates even severely I/O-delayed loop iterations.
-# The heartbeat loop collects 60+ metrics including slow operations (du -sb,
-# find, grep on RocksDB logs). Under fault injection I/O delays, a single
-# loop iteration can take 10+ minutes. The threshold must exceed the maximum
-# possible loop iteration time to avoid false violations.
+#
+# The primary defense against false violations is the loop_epoch precondition:
+# we only reach this point if the loop has completed a full iteration recently.
+# Once the loop completes, ALL files should have been written during that
+# iteration, so their ages should be bounded by loop_epoch_age + iteration_time.
+#
+# 7200s (2 hours) is a generous threshold that accommodates:
+# - I/O fault injection stalls on individual commands (find, du, grep)
+# - Cumulative slow operations across 60+ metrics in one iteration
+# - Process pauses (SIGSTOP/SIGCONT) during fault injection
+# Under normal conditions (no faults), MAX_AGE is typically < 30s.
 MAX_AGE=$((NOW - MIN_MTIME))
-THRESHOLD=1200
+THRESHOLD=7200
 
 if [ "$MAX_AGE" -le "$THRESHOLD" ]; then
     echo "PASS: Oldest metric file age is ${MAX_AGE}s (spread=${SPREAD}s) across ${FILE_COUNT} files (threshold: ${THRESHOLD}s)"

@@ -183,6 +183,7 @@ echo "unknown" > /shared/validator_nice
 echo "-1" > /shared/validator_syscall_count
 echo "-1:-1" > /shared/validator_tcp_conn_failures
 echo "-1:-1" > /shared/validator_tcp_outrsts
+echo "0" > /shared/validator_loop_epoch
 # Write a unique startup generation ID so drivers can detect container restarts
 # and reset their cross-invocation state (e.g., first-observed IDENTITY).
 date +%s%N > /shared/validator_startup_id
@@ -644,6 +645,10 @@ while true; do
 
     # Final heartbeat write at end of loop
     date +%s > /shared/validator_heartbeat
+    # Write loop-completion epoch: signals that ALL metrics in this iteration
+    # have been written. Used by the metric freshness driver as a more accurate
+    # precondition than the heartbeat (which is refreshed 7 times mid-loop).
+    date +%s > /shared/validator_loop_epoch
     sleep 5
 done
 ) &
