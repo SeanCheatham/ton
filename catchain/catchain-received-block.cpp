@@ -126,9 +126,9 @@ void CatChainReceivedBlockImpl::initialize_fork() {
     vt_.resize(fork_id_ + 1, 0);
   }
   ALWAYS(fork_id_ > 0, "Catchain block assigned a valid fork ID",
-         {{"source_id", static_cast<long long>(source_id_)},
-          {"height", static_cast<long long>(height_)},
-          {"fork_id", static_cast<long long>(fork_id_)}});
+         {{"source_id", static_cast<int>(source_id_)},
+          {"height", static_cast<int>(height_)},
+          {"fork_id", static_cast<int>(fork_id_)}});
   CHECK(vt_[fork_id_] < height_);
   vt_[fork_id_] = height_;
 }
@@ -159,12 +159,12 @@ void CatChainReceivedBlockImpl::pre_deliver(ton_api::catchain_block_data_fork &b
   }
 
   REACHABLE("Catchain fork proof detected",
-            {{"source_id", static_cast<long long>(source_id_)},
-             {"height", static_cast<long long>(height_)}});
+            {{"source_id", static_cast<int>(source_id_)},
+             {"height", static_cast<int>(height_)}});
   ALWAYS(b.left_->height_ == b.right_->height_, "Catchain fork proof blocks have same height",
-         {{"height", static_cast<long long>(b.left_->height_)}});
+         {{"height", static_cast<int>(b.left_->height_)}});
   ALWAYS(b.left_->src_ == b.right_->src_, "Catchain fork proof blocks have same source",
-         {{"src", static_cast<long long>(b.left_->src_)}});
+         {{"src", static_cast<int>(b.left_->src_)}});
   ALWAYS(b.left_->data_hash_ != b.right_->data_hash_, "Catchain fork proof blocks have different data hashes", {});
 
   CatChainReceiverSource *S = chain_->get_source(b.left_->src_);
@@ -247,23 +247,23 @@ void CatChainReceivedBlockImpl::deliver() {
   CHECK(in_db_);
 
   REACHABLE("Catchain block delivered",
-            {{"source_id", static_cast<long long>(source_id_)},
-             {"height", static_cast<long long>(height_)},
-             {"fork_id", static_cast<long long>(fork_id_)}});
+            {{"source_id", static_cast<int>(source_id_)},
+             {"height", static_cast<int>(height_)},
+             {"fork_id", static_cast<int>(fork_id_)}});
   ALWAYS(pending_deps_ == 0, "Catchain delivered block has no pending dependencies",
-         {{"source_id", static_cast<long long>(source_id_)},
-          {"height", static_cast<long long>(height_)}});
+         {{"source_id", static_cast<int>(source_id_)},
+          {"height", static_cast<int>(height_)}});
   ALWAYS(in_db_, "Catchain delivered block is persisted in DB",
-         {{"source_id", static_cast<long long>(source_id_)},
-          {"height", static_cast<long long>(height_)}});
+         {{"source_id", static_cast<int>(source_id_)},
+          {"height", static_cast<int>(height_)}});
   ALWAYS(state_ == bs_initialized, "Catchain delivered block was in initialized state",
-         {{"source_id", static_cast<long long>(source_id_)},
-          {"height", static_cast<long long>(height_)}});
+         {{"source_id", static_cast<int>(source_id_)},
+          {"height", static_cast<int>(height_)}});
   if (prev_ != nullptr && height_ > 1) {
     ALWAYS(prev_->get_height() + 1 == height_, "Catchain block height is exactly one more than predecessor",
-           {{"source_id", static_cast<long long>(source_id_)},
-            {"height", static_cast<long long>(height_)},
-            {"prev_height", static_cast<long long>(prev_->get_height())}});
+           {{"source_id", static_cast<int>(source_id_)},
+            {"height", static_cast<int>(height_)},
+            {"prev_height", static_cast<int>(prev_->get_height())}});
   }
 
   chain_->deliver_block(this);

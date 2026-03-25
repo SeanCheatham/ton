@@ -171,9 +171,9 @@ void AdnlPeerPairImpl::receive_packet_checked(AdnlPacket packet) {
     return;
   }
   if (packet.seqno() > 0) {
-    ALWAYS(packet.seqno() > 0, "ADNL incoming seqno is positive", {{"seqno", static_cast<long long>(packet.seqno())}});
+    ALWAYS(packet.seqno() > 0, "ADNL incoming seqno is positive", {{"seqno", static_cast<int>(packet.seqno())}});
     ALWAYS(!received_packet(packet.seqno()), "ADNL no duplicate seqno received",
-           {{"seqno", static_cast<long long>(packet.seqno())}});
+           {{"seqno", static_cast<int>(packet.seqno())}});
     if (received_packet(packet.seqno())) {
       VLOG(ADNL_INFO) << this << ": dropping IN message: old seqno: " << packet.seqno() << " (current max " << in_seqno_
                       << ")";
@@ -182,8 +182,8 @@ void AdnlPeerPairImpl::receive_packet_checked(AdnlPacket packet) {
   }
   if (packet.confirm_seqno() > 0) {
     ALWAYS(packet.confirm_seqno() <= out_seqno_, "ADNL confirm seqno does not exceed sent seqno",
-           {{"confirm", static_cast<long long>(packet.confirm_seqno())},
-            {"out", static_cast<long long>(out_seqno_)}});
+           {{"confirm", static_cast<int>(packet.confirm_seqno())},
+            {"out", static_cast<int>(out_seqno_)}});
     if (packet.confirm_seqno() > out_seqno_) {
       VLOG(ADNL_WARNING) << this << ": dropping IN message: new ack seqno: " << packet.confirm_seqno()
                          << " (current max sent " << out_seqno_ << ")";
@@ -344,7 +344,7 @@ void AdnlPeerPairImpl::send_messages_from_queue() {
         continue;
       }
       ALWAYS(M.size() <= get_mtu(), "ADNL message fits within MTU",
-             {{"size", static_cast<long long>(M.size())}, {"mtu", static_cast<long long>(get_mtu())}});
+             {{"size", static_cast<int>(M.size())}, {"mtu", static_cast<int>(get_mtu())}});
       CHECK(M.size() <= get_mtu());
       if (s + M.size() <= AdnlNetworkManager::get_mtu()) {
         s += M.size();
@@ -668,8 +668,8 @@ void AdnlPeerPairImpl::process_message(const adnlmessage::AdnlMessagePart &messa
 
     if (huge_message_offset_ == huge_message_.size()) {
       ALWAYS(huge_message_offset_ == huge_message_.size(), "ADNL huge message size matches on completion",
-             {{"offset", static_cast<long long>(huge_message_offset_)},
-              {"total", static_cast<long long>(huge_message_.size())}});
+             {{"offset", static_cast<int>(huge_message_offset_)},
+              {"total", static_cast<int>(huge_message_.size())}});
       //td::actor::send_closure(local_actor_, &AdnlLocalId::deliver, peer_id_short_, std::move(huge_message_));
       bool hash_matches = (sha256_bits256(huge_message_.as_slice()) == huge_message_hash_);
       ALWAYS(hash_matches, "ADNL huge message hash verified", {});
