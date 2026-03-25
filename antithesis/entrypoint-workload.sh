@@ -150,6 +150,8 @@ sdk_catalog_always "Validator syscall I/O counts are advancing when healthy"
 sdk_catalog_always "RocksDB LOG contains no write stall indicators when validator is healthy"
 sdk_catalog_always "Validator heartbeat interval is regular when healthy"
 sdk_catalog_always "Validator survives empty UDP packets"
+sdk_catalog_always "Validator resource limits are adequate for operation"
+sdk_catalog_always "Validator log non-fatal error count is bounded when healthy"
 echo "Assertion catalog emitted."
 
 # Signal that setup is complete

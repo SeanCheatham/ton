@@ -265,6 +265,9 @@ while true; do
     # Write open file descriptor count for resource monitoring
     FD_COUNT=$(ls /proc/1/fd 2>/dev/null | wc -l || echo "-1")
     echo "$FD_COUNT" > /shared/validator_fd_count
+    # Write NOFILE soft limit for resource headroom monitoring
+    NOFILE_LIMIT=$(awk '/^Max open files/{print $4}' /proc/1/limits 2>/dev/null || echo "-1")
+    echo "$NOFILE_LIMIT" > /shared/validator_nofile_limit
     # Write resident set size (KB) for memory monitoring
     RSS_KB=$(awk '/VmRSS/{print $2}' /proc/1/status 2>/dev/null || echo "-1")
     echo "$RSS_KB" > /shared/validator_mem_rss
@@ -557,6 +560,16 @@ while true; do
         WRITE_STALL_COUNT=$((WRITE_STALL_COUNT + COUNT))
     done
     echo "$WRITE_STALL_COUNT" > /shared/validator_rocksdb_write_stalls
+    # Count non-fatal error lines in validator log for error rate monitoring
+    # Exclude lines already caught by fatal/alloc checks to avoid double-counting
+    if [ -f /shared/validator.log ]; then
+        LOG_ERROR_COUNT=$(grep -ciE '\berror\b|\[E\s' /shared/validator.log 2>/dev/null || echo "0")
+        LOG_SIZE_KB=$(( $(stat -c %s /shared/validator.log 2>/dev/null || echo "0") / 1024 ))
+    else
+        LOG_ERROR_COUNT=0
+        LOG_SIZE_KB=0
+    fi
+    echo "${LOG_ERROR_COUNT}:${LOG_SIZE_KB}" > /shared/validator_log_error_count
     # Write RocksDB LOG file size (bytes) for LOG growth monitoring
     ROCKSDB_LOG_SIZE=0
     ROCKSDB_LOG_FILE="/var/ton-work/db/LOG"

@@ -75,6 +75,8 @@ EXPECTED_FILES=(
     /shared/validator_rss_history
     /shared/validator_fd_history
     /shared/validator_db_perms
+    /shared/validator_nofile_limit
+    /shared/validator_log_error_count
 )
 
 TOTAL=${#EXPECTED_FILES[@]}
