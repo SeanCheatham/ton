@@ -110,6 +110,18 @@
 | **Workload** | `parallel_driver_tcp_conn_failures.sh` — reads `/shared/validator_tcp_conn_failures` written by validator heartbeat loop |
 | **Status** | ✅ Implemented |
 
+### Validator TCP Reset Rate Is Bounded When Healthy
+
+| | |
+|---|---|
+| **Type** | Safety (Always) |
+| **Property** | When the validator is healthy, the ratio of TCP OutRsts to InSegs stays below 50% |
+| **Invariant** | `ALWAYS(out_rsts / in_segs < 0.5, "Validator TCP reset rate is bounded when healthy")` |
+| **Antithesis Angle** | Fault injection may cause resource exhaustion leading to socket backlog overflow and mass connection rejection |
+| **Why It Matters** | High reset rates indicate the validator is rejecting connections — distinct from retransmissions (packet loss) and connection failures (establishment errors). Completes the TCP L4 health monitoring triad |
+| **Workload** | `parallel_driver_tcp_outrsts.sh` — reads `/shared/validator_tcp_outrsts` written by validator heartbeat loop |
+| **Status** | ✅ Implemented |
+
 ## Future Properties (for antithesis-workload)
 
 ### 2. Validator Engine Does Not Crash

@@ -158,6 +158,7 @@ sdk_catalog_always "Validator socket count is not monotonically growing"
 sdk_catalog_always "TCP retransmission rate is bounded when validator is healthy"
 sdk_catalog_always "Validator has no IP-level input errors when healthy"
 sdk_catalog_always "Validator has no UDP buffer errors when healthy"
+sdk_catalog_always "Validator TCP reset rate is bounded when healthy"
 echo "Assertion catalog emitted."
 
 # Signal that setup is complete
