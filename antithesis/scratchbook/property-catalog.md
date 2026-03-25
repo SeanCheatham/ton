@@ -86,6 +86,18 @@
 | **Workload** | `parallel_driver_ip_errors.sh` — reads `/shared/validator_ip_errors` (InHdrErrors + InAddrErrors from `/proc/1/net/snmp`) |
 | **Status** | ✅ Implemented |
 
+### Validator Has No UDP Buffer Errors When Healthy
+
+| | |
+|---|---|
+| **Type** | Safety (Always) |
+| **Property** | The UDP buffer error counters (RcvbufErrors and SndbufErrors) from `/proc/1/net/snmp` are both zero when the validator is healthy |
+| **Invariant** | `ALWAYS(rcvbuf_errors == 0 && sndbuf_errors == 0, "Validator has no UDP buffer errors when healthy")` — evaluated only when all ports are up |
+| **Antithesis Angle** | Fault injection may cause UDP buffer overflows leading to silent packet loss on the ADNL protocol |
+| **Why It Matters** | UDP is the primary transport for TON's ADNL peer-to-peer protocol (port 30001). Buffer overflows cause silent packet loss — no application-level error is raised, and interface-level counters don't capture this. Silent UDP loss can cause missed blocks and consensus failures |
+| **Workload** | `parallel_driver_udp_buf_errors.sh` — reads `/shared/validator_udp_buf_errors` (RcvbufErrors:SndbufErrors from `/proc/1/net/snmp`) |
+| **Status** | ✅ Implemented |
+
 ## Future Properties (for antithesis-workload)
 
 ### 2. Validator Engine Does Not Crash

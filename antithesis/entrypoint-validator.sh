@@ -322,6 +322,10 @@ while true; do
     # Ip row fields: $5=InHdrErrors $6=InAddrErrors (second Ip: line has values)
     IP_ERRORS=$(awk '/^Ip:/{n++; if(n==2){print $5+$6}}' /proc/1/net/snmp 2>/dev/null || echo "-1")
     echo "$IP_ERRORS" > /shared/validator_ip_errors
+    # Read UDP buffer error counts from /proc/1/net/snmp
+    # Udp row: second line has values. RcvbufErrors is field 6, SndbufErrors is field 7
+    UDP_BUF_ERRORS=$(awk '/^Udp:/{n++; if(n==2){print $6":"$7}}' /proc/1/net/snmp 2>/dev/null || echo "-1:-1")
+    echo "$UDP_BUF_ERRORS" > /shared/validator_udp_buf_errors
     # Write voluntary + nonvoluntary context switches for scheduling health monitoring
     VOL_CS=$(awk '/^voluntary_ctxt_switches:/{print $2}' /proc/1/status 2>/dev/null || echo "-1")
     NONVOL_CS=$(awk '/^nonvoluntary_ctxt_switches:/{print $2}' /proc/1/status 2>/dev/null || echo "-1")
