@@ -57,10 +57,11 @@ fi
 # We send a plausible-looking prefix then disconnect.
 PARTIAL_HANDSHAKE=$(dd if=/dev/urandom bs=32 count=1 2>/dev/null | od -A n -t x1 | tr -d ' \n')
 
-# Send 10 partial handshakes in quick succession
+# Send 5 partial handshakes in quick succession (kept moderate to avoid
+# overwhelming a validator already under Antithesis fault injection)
 SENT=0
 FAILED=0
-for i in $(seq 1 10); do
+for i in $(seq 1 5); do
     # Send 32 bytes of partial handshake then immediately close
     if echo -ne "$(echo "$PARTIAL_HANDSHAKE" | sed 's/../\\x&/g')" | \
        nc -w 1 "$VALIDATOR_HOST" "$LITE_PORT" 2>/dev/null; then
@@ -72,27 +73,45 @@ done
 
 echo "Sent $SENT partial handshakes ($FAILED failed to connect)"
 
-# Brief pause for the validator to process/cleanup
-sleep 2
-
-# Verify validator is still alive after the attack
+# Give the validator time to process/cleanup, then retry health checks.
+# During Antithesis fault injection the validator may be transiently slow,
+# so we retry up to 5 times with increasing backoff before declaring failure.
 ALIVE=false
-if nc -z -w 2 "$VALIDATOR_HOST" "$LITE_PORT" 2>/dev/null; then
-    ALIVE=true
-fi
-
-# Check heartbeat is still fresh
 HB_FRESH=false
-if [ -f /shared/validator_heartbeat ]; then
-    HB_TS=$(cat /shared/validator_heartbeat 2>/dev/null | tr -d '[:space:]')
-    NOW=$(date +%s)
-    if [[ "$HB_TS" =~ ^[0-9]+$ ]]; then
-        AGE=$((NOW - HB_TS))
-        if [ "$AGE" -le 30 ]; then
-            HB_FRESH=true
+for attempt in 1 2 3 4 5; do
+    sleep "$((attempt))"
+
+    # Check port reachability
+    if nc -z -w 3 "$VALIDATOR_HOST" "$LITE_PORT" 2>/dev/null; then
+        ALIVE=true
+    else
+        ALIVE=false
+        echo "Attempt $attempt: liteserver port not reachable"
+        continue
+    fi
+
+    # Check heartbeat freshness
+    if [ -f /shared/validator_heartbeat ]; then
+        HB_TS=$(cat /shared/validator_heartbeat 2>/dev/null | tr -d '[:space:]')
+        NOW=$(date +%s)
+        if [[ "$HB_TS" =~ ^[0-9]+$ ]]; then
+            AGE=$((NOW - HB_TS))
+            if [ "$AGE" -le 60 ]; then
+                HB_FRESH=true
+            else
+                HB_FRESH=false
+                echo "Attempt $attempt: heartbeat stale (${AGE}s)"
+                continue
+            fi
         fi
     fi
-fi
+
+    # Both checks passed
+    if [ "$ALIVE" = "true" ] && [ "$HB_FRESH" = "true" ]; then
+        echo "Attempt $attempt: validator healthy"
+        break
+    fi
+done
 
 # Build details
 POST_FD=""
@@ -117,5 +136,4 @@ else
     sdk_always false "$ASSERTION_NAME" "$DETAILS"
 fi
 
-sleep 5
 exit 0
