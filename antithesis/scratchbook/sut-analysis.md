@@ -46,6 +46,18 @@ The system uses an actor model (tdactor) for concurrency. Each major subsystem (
 - The existing Dockerfile provides a working build pipeline
 - Clang 21 is the target compiler (already in the Dockerfile)
 
+## Memory Health Assertions
+
+The following memory-related assertions are tracked:
+
+- **mem_bounded**: Absolute RSS < 2GB
+- **vmsize_bounded**: Absolute VmSize bounded
+- **mem_peak**: VmPeak bounded
+- **mem_growth**: RSS not monotonically growing (trajectory detection via history)
+- **mmap_bounded**: Memory mapping count < 10,000
+- **RSS-to-VmSize ratio**: VmSize/VmRSS ratio < 10× — detects memory fragmentation where virtual address space grows much faster than physical usage
+- **mmap_growth**: Memory mapping count not monotonically growing — detects slow mmap leaks (RocksDB SST handles, arena creation without release) before hitting absolute bound
+
 ## Open Questions
 
 - What is the minimum viable topology for meaningful consensus testing? (likely 3+ validators)
