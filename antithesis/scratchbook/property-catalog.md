@@ -101,6 +101,30 @@ Antithesis assertions are embedded inline in `liteserver.cpp` to cover the lites
 - "Block ID matches request in getBlockHeader response" — block ID in response matches the requested ID
 - "Masterchain state is non-null for account query" — masterchain state is available when processing account queries
 
+## In-Process C++ SDK Assertions (validator/impl/collator.cpp)
+
+Antithesis assertions are embedded inline in `collator.cpp` to cover the block CONSTRUCTION pipeline — every block this validator proposes to the network is built here. This is the counterpart to `validate-query.cpp` (block validation). These assertions verify value flow conservation, hash integrity, structural validity, and size limits during block production.
+
+### REACHABLE Markers (3)
+- "Collator started" — confirms collation is being triggered via `start_up()`
+- "Block candidate produced successfully" — confirms a block candidate was successfully produced and returned via `return_block_candidate()`
+- "Collator fatal error" — confirms collation failure paths are exercised via `fatal_error()` (valuable during fault injection)
+
+### ALWAYS Assertions (7)
+
+**Value Flow & State Integrity (3 assertions):**
+- "Collator value flow is balanced: in equals out" — the fundamental blockchain invariant: no value is created or destroyed
+- "Collator Merkle update produces correct state hash" — the Merkle update applied to previous state produces the expected new state hash
+- "Collator Merkle update generation succeeds" — Merkle update generation for the shard state completes successfully
+
+**Structural Validation (2 assertions):**
+- "Collator produced block passes structural validation" — the newly created block passes TL-B structural validation
+- "Collator produced shard state passes structural validation" — the newly created shard state passes TL-B structural validation
+
+**Size & Hash Consistency (2 assertions):**
+- "Collator block size within consensus limit" — the serialized block size does not exceed the consensus-configured maximum
+- "Collator previous block root hash is consistent" — the previous block's root hash matches the stored reference (zero state path)
+
 ---
 
 ## Bootstrap Properties

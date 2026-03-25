@@ -34,6 +34,7 @@
 #include "vm/db/StaticBagOfCellsDb.h"
 #include "vm/dict.h"
 
+#include "antithesis_sdk.h"
 #include "candidate-serializer.h"
 #include "collator-impl.h"
 #include "fabric.h"
@@ -98,6 +99,7 @@ Collator::Collator(CollateParams params, td::actor::ActorId<ValidatorManager> ma
  * The results of these queries are handled by corresponding callback functions.
  */
 void Collator::start_up() {
+  REACHABLE("Collator started", {{"shard", shard_.to_str()}});
   LOG(WARNING) << "Collator for shard " << shard_.to_str() << " started"
                << (params_.attempt_idx ? PSTRING() << " (attempt #" << params_.attempt_idx << ")" : "");
   if (!check_cancelled()) {
@@ -349,6 +351,7 @@ std::string show_shard(const ton::ShardIdFull blk_id) {
  */
 bool Collator::fatal_error(td::Status error) {
   error.ensure_error();
+  REACHABLE("Collator fatal error", {{"shard", shard_.to_str()}, {"error", error.to_string()}});
   LOG(ERROR) << "cannot generate block candidate for " << show_shard(shard_) << " : " << error.to_string();
   if (busy_) {
     if (allow_repeat_collation_ && error.code() != ErrorCode::cancelled && params_.attempt_idx + 1 < MAX_ATTEMPTS &&
@@ -5769,6 +5772,7 @@ bool Collator::create_shard_state() {
       vm::load_cell_slice(state_root).print_rec(sb);
     };
   }
+  ALWAYS(block::gen::t_ShardState.validate_ref(1000000, state_root), "Collator produced shard state passes structural validation", {{"shard", shard_.to_str()}});
   if (verify >= 2) {
     LOG(INFO) << "verifying new ShardState";
     CHECK(block::gen::t_ShardState.validate_ref(1000000, state_root));
@@ -5776,6 +5780,7 @@ bool Collator::create_shard_state() {
   }
   LOG(INFO) << "creating Merkle update for the ShardState";
   auto r_state_update = vm::MerkleUpdate::generate(prev_state_root_, state_root, state_usage_tree_.get());
+  ALWAYS(r_state_update.is_ok(), "Collator Merkle update generation succeeds", {{"shard", shard_.to_str()}});
   if (r_state_update.is_error()) {
     return fatal_error("cannot create Merkle update for ShardState");
   }
@@ -5987,6 +5992,7 @@ bool Collator::store_zero_state_ref(vm::CellBuilder& cb) {
   RootHash root_hash = prev_state_root_->get_hash().bits();
   CHECK(prev_blocks.size() == 1);
   CHECK(!prev_blocks[0].seqno());
+  ALWAYS(root_hash == prev_blocks[0].root_hash, "Collator previous block root hash is consistent", {{"shard", shard_.to_str()}});
   CHECK(root_hash == prev_blocks[0].root_hash);
   return cb.store_long_bool(prev_state_lt_, 64)            // ext_blk_ref$_ end_lt:uint64
          && cb.store_long_bool(0, 32)                      // seq_no:uint32
@@ -6025,6 +6031,7 @@ bool Collator::store_prev_blk_ref(vm::CellBuilder& cb, bool is_after_merge) {
  * @returns True if the value flow is correct, false otherwise.
  */
 bool Collator::check_value_flow() {
+  ALWAYS(value_flow_.validate(), "Collator value flow is balanced: in equals out", {{"shard", shard_.to_str()}});
   if (!value_flow_.validate()) {
     LOG(ERROR) << "incorrect value flow in new block : " << value_flow_.to_str();
     return fatal_error("incorrect value flow for the newly-generated block: in != out");
@@ -6126,6 +6133,7 @@ bool Collator::create_block() {
       vm::load_cell_slice(new_block).print_rec(sb);
     };
   }
+  ALWAYS(block::gen::t_Block.validate_ref(10000000, new_block), "Collator produced block passes structural validation", {{"shard", shard_.to_str()}});
   if (verify >= 1) {
     LOG(INFO) << "verifying new Block";
     if (!block::gen::t_Block.validate_ref(10000000, new_block)) {
@@ -6398,6 +6406,7 @@ bool Collator::create_block_candidate() {
     // we can't generate two proofs at the same time for the same root (it is not currently supported by cells)
     // so we have can't reuse new state and have to regenerate it with merkle update
     auto new_state = vm::MerkleUpdate::apply(prev_state_root_pure_, state_update).ensure().move_as_ok();
+    ALWAYS(new_state->get_hash() == state_root->get_hash(), "Collator Merkle update produces correct state hash", {{"shard", shard_.to_str()}});
     CHECK(new_state->get_hash() == state_root->get_hash());
     CHECK(shard_conf_);
     auto neighbor_list = shard_conf_->get_neighbor_shard_hash_ids(shard_);
@@ -6430,6 +6439,7 @@ bool Collator::create_block_candidate() {
   }
 
   // 3.1 check block and collated data size
+  ALWAYS(block_candidate->data.size() <= consensus_config.max_block_size, "Collator block size within consensus limit", {{"shard", shard_.to_str()}, {"size", std::to_string(block_candidate->data.size())}});
   if (block_candidate->data.size() > consensus_config.max_block_size) {
     return fatal_error(PSTRING() << "block size (" << block_candidate->data.size()
                                  << ") exceeds the limit in consensus config (" << consensus_config.max_block_size
@@ -6483,6 +6493,7 @@ void Collator::return_block_candidate(td::Result<td::Unit> saved, td::PerfLogAct
     fatal_error(std::move(err));
   } else {
     CHECK(block_candidate);
+    REACHABLE("Block candidate produced successfully", {{"block_id", block_candidate->id.to_str()}});
     LOG(WARNING) << "sending new BlockCandidate to Promise";
     LOG(WARNING) << "collation took " << perf_timer_.elapsed() << " s";
     LOG(WARNING) << perf_log_;
