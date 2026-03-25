@@ -46,6 +46,7 @@
 #include "fabric.h"
 #include "liteserver.hpp"
 #include "shard.hpp"
+#include "antithesis_sdk.h"
 
 namespace ton {
 
@@ -86,6 +87,7 @@ LiteQuery::LiteQuery(
 
 void LiteQuery::abort_query(td::Status reason) {
   LOG(INFO) << "aborted liteserver query: " << reason.to_string();
+  REACHABLE("Liteserver query aborted", {{"error", reason.to_string()}});
   if (acc_state_promise_) {
     acc_state_promise_.set_error(std::move(reason));
   } else if (promise_) {
@@ -114,6 +116,8 @@ void LiteQuery::alarm() {
 }
 
 bool LiteQuery::finish_query(td::BufferSlice result, bool skip_cache_update) {
+  ALWAYS(result.size() > 0, "Liteserver response is non-empty", {});
+  REACHABLE("Liteserver query finished successfully", {});
   if (use_cache_ && !skip_cache_update) {
     td::actor::send_closure(cache_, &LiteServerCache::update, cache_key_, result.clone());
   }
@@ -189,6 +193,7 @@ bool LiteQuery::use_cache() {
 }
 
 void LiteQuery::perform() {
+  REACHABLE("Liteserver query dispatched", {{"query_type", "perform"}});
   lite_api::downcast_call(
       *query_obj_,
       td::overloaded(
@@ -374,6 +379,7 @@ void LiteQuery::perform_getBlock(BlockIdExt blkid) {
 
 void LiteQuery::continue_getBlock(BlockIdExt blkid, Ref<ton::validator::BlockData> block) {
   LOG(INFO) << "obtained data for getBlock(" << blkid.to_str() << ")";
+  ALWAYS(block.not_null(), "Block data is non-null in getBlock response", {{"block_id", blkid.to_str()}});
   CHECK(block.not_null());
   auto b = ton::create_serialize_tl_object<ton::lite_api::liteServer_blockData>(ton::create_tl_lite_block_id(blkid),
                                                                                 block->data());
@@ -423,7 +429,9 @@ static bool visit(Ref<vm::CellSlice> cs_ref) {
 
 void LiteQuery::continue_getBlockHeader(BlockIdExt blkid, int mode, Ref<ton::validator::BlockData> block) {
   LOG(INFO) << "obtained data for getBlockHeader(" << blkid.to_str() << ", " << mode << ")";
+  ALWAYS(block.not_null(), "Block data is non-null in getBlockHeader response", {{"block_id", blkid.to_str()}});
   CHECK(block.not_null());
+  ALWAYS(block.not_null() && block->block_id() == blkid, "Block ID matches request in getBlockHeader response", {{"block_id", blkid.to_str()}});
   CHECK(block->block_id() == blkid);
   auto block_root = block->root_cell();
   if (block_root.is_null()) {
@@ -526,6 +534,7 @@ void LiteQuery::perform_getState(BlockIdExt blkid) {
 
 void LiteQuery::continue_getState(BlockIdExt blkid, Ref<ton::validator::ShardState> state) {
   LOG(INFO) << "obtained data for getState(" << blkid.to_str() << ")";
+  ALWAYS(state.not_null(), "Block state is non-null in getState response", {{"block_id", blkid.to_str()}});
   CHECK(state.not_null());
   auto res = state->serialize();
   if (res.is_error()) {
@@ -835,6 +844,7 @@ void LiteQuery::perform_getAccountState(BlockIdExt blkid, WorkchainId workchain,
 void LiteQuery::continue_getAccountState_0(Ref<ton::validator::MasterchainState> mc_state, BlockIdExt blkid) {
   LOG(INFO) << "obtained last masterchain block = " << blkid.to_str();
   base_blk_id_ = blkid;
+  ALWAYS(mc_state.not_null(), "Masterchain state is non-null for account query", {{"block_id", blkid.to_str()}});
   CHECK(mc_state.not_null());
   mc_state_ = Ref<MasterchainStateQ>(std::move(mc_state));
   CHECK(mc_state_.not_null());

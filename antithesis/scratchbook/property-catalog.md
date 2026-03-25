@@ -63,6 +63,23 @@ The Antithesis C++ SDK (`third-party/antithesis-sdk-cpp/`) is now linked to the 
 
 These in-process assertions complement the 97 existing external workload-based assertions.
 
+## In-Process C++ SDK Assertions (validator/impl/liteserver.cpp)
+
+Antithesis assertions are embedded inline in `liteserver.cpp` to cover the liteserver API layer — the external query interface that lite-clients connect to. These complement the block-processing assertions in `validator/invariants.hpp`.
+
+### REACHABLE Markers (3)
+- "Liteserver query dispatched" — confirms liteserver queries are being dispatched via `perform()`
+- "Liteserver query finished successfully" — confirms queries complete with a response via `finish_query()`
+- "Liteserver query aborted" — confirms error/abort paths are exercised via `abort_query()`
+
+### ALWAYS Assertions (6)
+- "Liteserver response is non-empty" — every successful query response contains data
+- "Block data is non-null in getBlock response" — block data fetched for getBlock is not null
+- "Block state is non-null in getState response" — shard state fetched for getState is not null
+- "Block data is non-null in getBlockHeader response" — block data fetched for getBlockHeader is not null
+- "Block ID matches request in getBlockHeader response" — block ID in response matches the requested ID
+- "Masterchain state is non-null for account query" — masterchain state is available when processing account queries
+
 ---
 
 ## Bootstrap Properties
