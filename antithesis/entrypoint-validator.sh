@@ -175,6 +175,7 @@ echo "0" > /shared/validator_compaction_count
 echo "0:0" > /shared/validator_thread_history
 echo "-1" > /shared/validator_vmsize
 echo "0" > /shared/validator_rocksdb_log_size
+echo "0" > /shared/validator_rocksdb_write_stalls
 echo "unknown" > /shared/validator_pid1_comm
 echo "unknown" > /shared/validator_nice
 echo "-1" > /shared/validator_syscall_count
@@ -547,9 +548,11 @@ while true; do
     done
     echo "$CORRUPTION_COUNT" > /shared/validator_rocksdb_errors
     # Scan RocksDB LOG files for write stall indicators
+    # Use specific patterns that match actual stall events, not stats dump headers
+    # like "Write Stall Stats" which appear during normal periodic stats output.
     WRITE_STALL_COUNT=0
     for logf in $ROCKSDB_LOG; do
-        COUNT=$(grep -ciE "Stalling writes|Stopping writes|Write stall" "$logf" 2>/dev/null) || true
+        COUNT=$(grep -ciE "Stalling writes because|Stopping writes because" "$logf" 2>/dev/null) || true
         COUNT=${COUNT:-0}
         WRITE_STALL_COUNT=$((WRITE_STALL_COUNT + COUNT))
     done

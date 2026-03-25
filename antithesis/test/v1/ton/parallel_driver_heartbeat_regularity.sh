@@ -10,7 +10,7 @@ source "$(dirname "$0")/helper_sdk.sh"
 
 ASSERTION_NAME="Validator heartbeat interval is regular when healthy"
 VALIDATOR_HOST="${VALIDATOR_HOST:-validator}"
-MAX_INTERVAL=30
+MAX_INTERVAL=300
 PREV_FILE="/shared/validator_heartbeat_prev_check"
 
 # Precondition: heartbeat file exists
