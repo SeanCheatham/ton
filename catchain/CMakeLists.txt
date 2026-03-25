@@ -28,5 +28,5 @@ target_include_directories(overlay PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>/..
   ${OPENSSL_INCLUDE_DIR}
 )
-target_link_libraries(catchain PRIVATE tdutils tdactor adnl tl_api dht tdfec overlay)
+target_link_libraries(catchain PRIVATE tdutils tdactor adnl tl_api dht tdfec overlay antithesis-sdk-cpp)
 

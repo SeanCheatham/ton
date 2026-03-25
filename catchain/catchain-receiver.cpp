@@ -28,6 +28,7 @@
 #include "td/utils/port/path.h"
 
 #include "catchain-receiver.hpp"
+#include "antithesis_sdk.h"
 
 namespace ton {
 
@@ -65,6 +66,11 @@ void CatChainReceiverImpl::deliver_block(CatChainReceivedBlock *block) {
   VLOG(CATCHAIN_INFO) << this << ": delivering block " << block->get_hash() << " src=" << block->get_source_id()
                       << " fork=" << block->get_fork_id() << " height=" << block->get_height()
                       << " custom=" << block->is_custom();
+  REACHABLE("Catchain block delivered to callback",
+            {{"source_id", static_cast<long long>(block->get_source_id())},
+             {"height", static_cast<long long>(block->get_height())}});
+  ALWAYS(block->get_height() > 0, "Catchain delivered block has positive height",
+         {{"source_id", static_cast<long long>(block->get_source_id())}});
   callback_->new_block(block->get_source_id(), block->get_fork_id(), block->get_hash(), block->get_height(),
                        block->get_height() == 1 ? CatChainBlockHash::zero() : block->get_prev_hash(),
                        block->get_dep_hashes(), block->get_vt(),
@@ -79,6 +85,9 @@ void CatChainReceiverImpl::deliver_block(CatChainReceivedBlock *block) {
 
   auto update = create_tl_object<ton_api::catchain_blockUpdate>(block->export_tl());
   td::BufferSlice D = serialize_tl_object(update, true, block->get_payload().as_slice());
+  ALWAYS(D.size() <= opts_.max_serialized_block_size, "Catchain delivered block serialization within size limit",
+         {{"size", static_cast<long long>(D.size())},
+          {"limit", static_cast<long long>(opts_.max_serialized_block_size)}});
   CHECK(D.size() <= opts_.max_serialized_block_size);
 
   td::actor::send_closure(overlay_manager_, &overlay::Overlays::send_multiple_messages, std::move(v),
@@ -104,6 +113,12 @@ void CatChainReceiverImpl::receive_block(adnl::AdnlNodeIdShort src, tl_object_pt
                            << block->incarnation_;
     return;
   }
+
+  REACHABLE("Catchain block received from network",
+            {{"src_id", static_cast<long long>(src_id)}});
+  ALWAYS(src_id < get_sources_cnt(), "Catchain received block source ID is within bounds",
+         {{"src_id", static_cast<long long>(src_id)},
+          {"sources_cnt", static_cast<long long>(get_sources_cnt())}});
 
   td::uint64 max_block_height = get_max_block_height(opts_, sources_.size());
   if ((td::uint32)block->height_ > max_block_height) {
