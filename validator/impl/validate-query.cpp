@@ -37,6 +37,7 @@
 #include "storage-stat-cache.hpp"
 #include "top-shard-descr.hpp"
 #include "validate-query.hpp"
+#include "antithesis_sdk.h"
 
 #define REJECT_UNLESS_MSG(condition, msg) \
   if (!(condition)) {                     \
@@ -136,6 +137,7 @@ void ValidateQuery::abort_query(td::Status error) {
 bool ValidateQuery::reject_query(std::string error, td::BufferSlice reason) {
   error = error_ctx() + error;
   LOG(ERROR) << "REJECT: aborting validation of block candidate for " << shard_.to_str() << " : " << error;
+  REACHABLE("Block validation rejected", {{"block_id", id_.to_str()}, {"shard", shard_.to_str()}, {"error", error}});
   if (main_promise) {
     record_stats(false, error);
     errorlog::ErrorLog::log(PSTRING() << "REJECT: aborting validation of block candidate for " << shard_.to_str()
@@ -258,6 +260,7 @@ void ValidateQuery::finish_query() {
   if (main_promise) {
     record_stats(true);
     LOG(WARNING) << "validate query done";
+    REACHABLE("Block validation completed successfully", {{"block_id", id_.to_str()}});
     double ok_from_utime = now_ms_ ? (double)now_ms_.value() / 1000.0 : (double)now_;
     main_promise.set_result(CandidateAccept{.ok_from_utime = ok_from_utime});
   }
@@ -278,6 +281,7 @@ void ValidateQuery::finish_query() {
  */
 void ValidateQuery::start_up() {
   LOG(WARNING) << "validate query for " << block_candidate.id.to_str() << " started";
+  REACHABLE("Block validation query started", {{"block_id", id_.to_str()}, {"shard", shard_.to_str()}});
   alarm_timestamp() = timeout;
   created_by_ = block_candidate.pubkey;
 
@@ -463,6 +467,7 @@ bool ValidateQuery::unpack_block_candidate() {
   vm::BagOfCells boc1;
   // 1. deserialize block itself
   FileHash fhash = block::compute_file_hash(block_candidate.data);
+  ALWAYS(fhash == id_.file_hash, "Block candidate file hash matches declared hash", {{"block_id", id_.to_str()}});
   if (fhash != id_.file_hash) {
     return reject_query(PSTRING() << "block candidate has invalid file hash: declared " << id_.file_hash.to_hex()
                                   << ", actual " << fhash.to_hex());
@@ -478,6 +483,7 @@ bool ValidateQuery::unpack_block_candidate() {
   REJECT_UNLESS(block_root_.not_null());
   // 2. check that root_hash equals the announced one
   RootHash rhash{block_root_->get_hash().bits()};
+  ALWAYS(rhash == id_.root_hash, "Block candidate root hash matches declared hash", {{"block_id", id_.to_str()}});
   if (rhash != id_.root_hash) {
     return reject_query(PSTRING() << "block candidate has invalid root hash: declared " << id_.root_hash.to_hex()
                                   << ", actual " << rhash.to_hex());
@@ -1406,6 +1412,7 @@ bool ValidateQuery::compute_prev_state() {
     }
   }
   Bits256 state_hash{prev_state_root_->get_hash().bits()};
+  ALWAYS(state_hash == prev_state_hash_, "Previous state hash matches block header declaration", {{"block_id", id_.to_str()}});
   if (state_hash != prev_state_hash_) {
     return reject_query("previous state hash mismatch for block "s + id_.to_str() + " : block header declares " +
                         prev_state_hash_.to_hex() + " , actual " + state_hash.to_hex());
@@ -1419,6 +1426,7 @@ bool ValidateQuery::compute_prev_state() {
 bool ValidateQuery::compute_next_state() {
   LOG(DEBUG) << "computing next state";
   auto res = vm::MerkleUpdate::validate(state_update_);
+  ALWAYS(res.is_ok(), "Block state Merkle update is valid", {{"block_id", id_.to_str()}});
   if (res.is_error()) {
     return reject_query("state update is invalid: "s + res.move_as_error().to_string());
   }
@@ -1432,6 +1440,7 @@ bool ValidateQuery::compute_next_state() {
   }
   state_root_ = r_state_root.move_as_ok();
   Bits256 state_hash{state_root_->get_hash().bits()};
+  ALWAYS(state_hash == state_hash_, "Computed next state hash matches block header declaration", {{"block_id", id_.to_str()}});
   if (state_hash != state_hash_) {
     return reject_query("next state hash mismatch for block "s + id_.to_str() + " : block header declares " +
                         state_hash_.to_hex() + " , actual " + state_hash.to_hex());
@@ -1444,6 +1453,7 @@ bool ValidateQuery::compute_next_state() {
     return reject_query(PSTRING() << "new state contains generation lt " << info.gen_lt << " distinct from end_lt "
                                   << end_lt_ << " in block header");
   }
+  ALWAYS(now_ == info.gen_utime, "New state generation time matches block header", {{"block_id", id_.to_str()}});
   if (now_ != info.gen_utime) {
     return reject_query(PSTRING() << "new state contains generation time " << info.gen_utime
                                   << " distinct from the value " << now_ << " in block header");

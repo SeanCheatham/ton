@@ -63,6 +63,27 @@ The Antithesis C++ SDK (`third-party/antithesis-sdk-cpp/`) is now linked to the 
 
 These in-process assertions complement the 97 existing external workload-based assertions.
 
+## In-Process C++ SDK Assertions (validator/impl/validate-query.cpp)
+
+Antithesis assertions are embedded inline in `validate-query.cpp` to cover the block validation pipeline — the core data integrity path where every block received from other validators is verified. These complement the block-processing assertions in `validator/invariants.hpp` and the liteserver API assertions.
+
+### REACHABLE Markers (3)
+- "Block validation query started" — confirms validation queries are being initiated via `start_up()`
+- "Block validation completed successfully" — confirms validation queries finish successfully via `finish_query()`
+- "Block validation rejected" — confirms rejection paths are exercised via `reject_query()` (critical signal during fault injection)
+
+### ALWAYS Assertions (6)
+
+**Hash Verification (3 assertions):**
+- "Block candidate file hash matches declared hash" — file hash of block data matches the declared hash
+- "Block candidate root hash matches declared hash" — root hash of deserialized block matches the declared hash
+- "Previous state hash matches block header declaration" — previous state hash matches what the block header declares
+
+**State Transition Integrity (3 assertions):**
+- "Block state Merkle update is valid" — the Merkle update in the block is structurally valid
+- "Computed next state hash matches block header declaration" — the computed next state hash matches the block header
+- "New state generation time matches block header" — the new state's generation time is consistent with the block header
+
 ## In-Process C++ SDK Assertions (validator/impl/liteserver.cpp)
 
 Antithesis assertions are embedded inline in `liteserver.cpp` to cover the liteserver API layer — the external query interface that lite-clients connect to. These complement the block-processing assertions in `validator/invariants.hpp`.
