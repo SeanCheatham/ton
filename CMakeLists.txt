@@ -284,6 +284,7 @@ add_subdirectory(third-party/tl-parser EXCLUDE_FROM_ALL)
 
 message("Add antithesis-sdk-cpp")
 add_subdirectory(third-party/antithesis-sdk-cpp EXCLUDE_FROM_ALL)
+target_include_directories(antithesis-sdk-cpp INTERFACE ${CMAKE_SOURCE_DIR}/third-party/antithesis-sdk-cpp)
 
 message("Add ton")
 include(BuildBLST)
