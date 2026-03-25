@@ -282,6 +282,9 @@ endif ()
 message("Add tl-parser")
 add_subdirectory(third-party/tl-parser EXCLUDE_FROM_ALL)
 
+message("Add antithesis-sdk-cpp")
+add_subdirectory(third-party/antithesis-sdk-cpp EXCLUDE_FROM_ALL)
+
 message("Add ton")
 include(BuildBLST)
 include(BuildSECP256K1)

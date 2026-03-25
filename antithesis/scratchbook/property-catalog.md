@@ -1,5 +1,70 @@
 # Property Catalog: TON Blockchain Node
 
+## In-Process C++ SDK Assertions (validator/invariants.hpp)
+
+The Antithesis C++ SDK (`third-party/antithesis-sdk-cpp/`) is now linked to the `validator` and `ton_validator` libraries. In-process assertions are embedded in `validator/invariants.hpp`, which is called on every block accept, apply, and proof verification.
+
+### REACHABLE Markers (4)
+- "Post-apply invariant check reached"
+- "Post-accept invariant check reached"
+- "Post-check-proof invariant check reached"
+- "Post-check-proof-link invariant check reached"
+
+### ALWAYS Assertions (~25)
+
+**Post-apply (8 assertions):**
+- "Block state received after apply"
+- "Block state root hash initialized after apply"
+- "Block logical time initialized after apply"
+- "Block unix time initialized after apply"
+- "Block split-after initialized after apply"
+- "Block proof initialized after apply for non-genesis"
+- "Block marked processed after apply"
+- "Block marked applied after apply"
+
+**Post-accept (11 assertions):**
+- "Block received after accept"
+- "Block state received after accept"
+- "Block state root hash initialized after accept"
+- "Block merge-before initialized after accept"
+- "Block split-after initialized after accept"
+- "Block prev initialized after accept"
+- "Block logical time initialized after accept"
+- "Block unix time initialized after accept"
+- "Masterchain block proof initialized after accept"
+- "Masterchain block applied after accept"
+- "Masterchain key block flag initialized after accept"
+- "Non-masterchain block proof link initialized after accept"
+
+**Post-check-proof (8 assertions):**
+- "Block merge-before initialized after proof check"
+- "Block split-after initialized after proof check"
+- "Block prev initialized after proof check"
+- "Block state root hash initialized after proof check"
+- "Block logical time initialized after proof check"
+- "Block unix time initialized after proof check"
+- "Block proof initialized after proof check"
+- "Block key block flag initialized after proof check"
+
+**Post-check-proof-link (7 assertions):**
+- "Block merge-before initialized after proof link check"
+- "Block split-after initialized after proof link check"
+- "Block prev initialized after proof link check"
+- "Block state root hash initialized after proof link check"
+- "Block logical time initialized after proof link check"
+- "Block unix time initialized after proof link check"
+- "Block proof link initialized after proof link check"
+
+### Build Integration
+- `CMakeLists.txt`: `add_subdirectory(third-party/antithesis-sdk-cpp EXCLUDE_FROM_ALL)`
+- `third-party/antithesis-sdk-cpp/CMakeLists.txt`: Added `target_include_directories(INTERFACE)`
+- `validator/CMakeLists.txt`: Linked `antithesis-sdk-cpp` to `validator`
+- `validator/impl/CMakeLists.txt`: Linked `antithesis-sdk-cpp` to `ton_validator`
+
+These in-process assertions complement the 97 existing external workload-based assertions.
+
+---
+
 ## Bootstrap Properties
 
 ### 1. Validator Engine Startup Reachable

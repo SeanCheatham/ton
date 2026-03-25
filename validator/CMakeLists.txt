@@ -249,7 +249,7 @@ target_include_directories(full-node PUBLIC
   ${OPENSSL_INCLUDE_DIR}
   )
 
-target_link_libraries(validator PRIVATE validator-db)
+target_link_libraries(validator PRIVATE validator-db antithesis-sdk-cpp)
 
 target_link_libraries(validator-disk PRIVATE validator-db)
 
