@@ -154,6 +154,8 @@ sdk_catalog_always "Validator resource limits are adequate for operation"
 sdk_catalog_always "Validator log non-fatal error count is bounded when healthy"
 sdk_catalog_always "RSS-to-VmSize ratio is bounded when validator is healthy"
 sdk_catalog_always "Validator memory mapping count is not monotonically growing"
+sdk_catalog_always "TCP retransmission rate is bounded when validator is healthy"
+sdk_catalog_always "Validator has no IP-level input errors when healthy"
 echo "Assertion catalog emitted."
 
 # Signal that setup is complete

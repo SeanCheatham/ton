@@ -314,6 +314,14 @@ while true; do
     # Sum rx_errs + tx_errs + rx_drop + tx_drop across all interfaces (skip lo)
     NET_ERRORS=$(awk 'NR>2 && $1 !~ /lo:/ {e+=$4+$5+$12+$13} END {print e+0}' /proc/1/net/dev 2>/dev/null || echo "-1")
     echo "$NET_ERRORS" > /shared/validator_net_errors
+    # Read TCP retransmission stats from /proc/1/net/snmp for protocol-level network health
+    # Tcp row fields: $1=Tcp: $2...$12=OutSegs $13=RetransSegs (second Tcp: line has values)
+    TCP_STATS=$(awk '/^Tcp:/{n++; if(n==2){print $12":"$13}}' /proc/1/net/snmp 2>/dev/null || echo "-1:-1")
+    echo "$TCP_STATS" > /shared/validator_tcp_retrans
+    # Read IP-level input errors from /proc/1/net/snmp
+    # Ip row fields: $5=InHdrErrors $6=InAddrErrors (second Ip: line has values)
+    IP_ERRORS=$(awk '/^Ip:/{n++; if(n==2){print $5+$6}}' /proc/1/net/snmp 2>/dev/null || echo "-1")
+    echo "$IP_ERRORS" > /shared/validator_ip_errors
     # Write voluntary + nonvoluntary context switches for scheduling health monitoring
     VOL_CS=$(awk '/^voluntary_ctxt_switches:/{print $2}' /proc/1/status 2>/dev/null || echo "-1")
     NONVOL_CS=$(awk '/^nonvoluntary_ctxt_switches:/{print $2}' /proc/1/status 2>/dev/null || echo "-1")

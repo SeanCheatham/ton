@@ -62,6 +62,30 @@
 | **Workload** | `parallel_driver_empty_udp.sh` — sends 10 empty UDP datagrams then verifies all ports still reachable |
 | **Status** | ✅ Implemented |
 
+### TCP Retransmission Rate Is Bounded When Validator Is Healthy
+
+| | |
+|---|---|
+| **Type** | Safety (Always) |
+| **Property** | The ratio of TCP retransmitted segments (RetransSegs) to total outbound segments (OutSegs) stays below 10% when the validator is healthy |
+| **Invariant** | `ALWAYS(retrans_segs * 100 / out_segs <= 10, "TCP retransmission rate is bounded when validator is healthy")` — evaluated only when all ports are up and OutSegs >= 100 |
+| **Antithesis Angle** | Fault injection may cause network congestion or packet loss that triggers TCP retransmissions, invisible to interface-level error counters |
+| **Why It Matters** | High retransmission rates degrade liteserver and console performance, cause latency spikes, and can cascade into timeout failures |
+| **Workload** | `parallel_driver_tcp_retrans.sh` — reads `/shared/validator_tcp_retrans` (OutSegs:RetransSegs from `/proc/1/net/snmp`) |
+| **Status** | ✅ Implemented |
+
+### Validator Has No IP-Level Input Errors When Healthy
+
+| | |
+|---|---|
+| **Type** | Safety (Always) |
+| **Property** | The IP-level error counters (InHdrErrors + InAddrErrors) from `/proc/1/net/snmp` are zero when the validator is healthy |
+| **Invariant** | `ALWAYS(ip_errors == 0, "Validator has no IP-level input errors when healthy")` — evaluated only when all ports are up |
+| **Antithesis Angle** | Fault injection or adversarial traffic may produce malformed IP packets with corrupted headers |
+| **Why It Matters** | Non-zero IP errors indicate network configuration problems or corrupted packet headers — relevant for adversarial resilience |
+| **Workload** | `parallel_driver_ip_errors.sh` — reads `/shared/validator_ip_errors` (InHdrErrors + InAddrErrors from `/proc/1/net/snmp`) |
+| **Status** | ✅ Implemented |
+
 ## Future Properties (for antithesis-workload)
 
 ### 2. Validator Engine Does Not Crash
