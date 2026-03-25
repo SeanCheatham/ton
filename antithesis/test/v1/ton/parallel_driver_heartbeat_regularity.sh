@@ -12,6 +12,12 @@ ASSERTION_NAME="Validator heartbeat interval is regular when healthy"
 VALIDATOR_HOST="${VALIDATOR_HOST:-validator}"
 MAX_INTERVAL=300
 PREV_FILE="/shared/validator_heartbeat_prev_check"
+PREV_WALLCLOCK_FILE="/shared/validator_heartbeat_prev_check_wallclock"
+# If more wall-clock time than this has elapsed since our last successful
+# check, we assume the validator was unhealthy in between and reset instead
+# of asserting.  Must be comfortably larger than the Test Composer parallel
+# driver scheduling interval.
+MAX_WALLCLOCK_GAP=600
 
 # Precondition: heartbeat file exists
 HEARTBEAT_FILE="/shared/validator_heartbeat"
@@ -43,6 +49,7 @@ fi
 if [[ ! -f "$PREV_FILE" ]]; then
     # First run -- save current and skip
     echo "$CURRENT_TS" > "$PREV_FILE"
+    echo "$NOW" > "$PREV_WALLCLOCK_FILE"
     echo "First observation, saving baseline"
     exit 0
 fi
@@ -50,7 +57,23 @@ fi
 PREV_TS=$(cat "$PREV_FILE" 2>/dev/null | tr -d '[:space:]')
 if ! [[ "$PREV_TS" =~ ^[0-9]+$ ]]; then
     echo "$CURRENT_TS" > "$PREV_FILE"
+    echo "$NOW" > "$PREV_WALLCLOCK_FILE"
     echo "Invalid previous timestamp, resetting"
+    exit 0
+fi
+
+# If too much wall-clock time has elapsed since our last successful check,
+# the validator was likely unhealthy in between (faults, restarts).  We
+# cannot meaningfully assess regularity across that gap, so reset baseline.
+PREV_WALL=$(cat "$PREV_WALLCLOCK_FILE" 2>/dev/null | tr -d '[:space:]')
+if ! [[ "$PREV_WALL" =~ ^[0-9]+$ ]]; then
+    PREV_WALL=0
+fi
+WALL_GAP=$((NOW - PREV_WALL))
+if (( WALL_GAP > MAX_WALLCLOCK_GAP )); then
+    echo "$CURRENT_TS" > "$PREV_FILE"
+    echo "$NOW" > "$PREV_WALLCLOCK_FILE"
+    echo "Wall-clock gap ${WALL_GAP}s > ${MAX_WALLCLOCK_GAP}s since last check, resetting baseline"
     exit 0
 fi
 
@@ -59,6 +82,7 @@ INTERVAL=$((CURRENT_TS - PREV_TS))
 
 # Save current as previous for next invocation
 echo "$CURRENT_TS" > "$PREV_FILE"
+echo "$NOW" > "$PREV_WALLCLOCK_FILE"
 
 # If heartbeat hasn't changed, skip (we may be called faster than the 5s loop)
 if (( INTERVAL == 0 )); then
