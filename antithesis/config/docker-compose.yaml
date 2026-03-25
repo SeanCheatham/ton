@@ -13,7 +13,7 @@ services:
       - CONSOLE_PORT=30002
       - LITE_PORT=30003
       - THREADS=2
-      - VERBOSITY=3
+      - VERBOSITY=2
     volumes:
       - shared:/shared
 
