@@ -155,6 +155,7 @@ echo "0" > /shared/validator_sst_count
 echo "-1" > /shared/validator_current_manifest_consistent
 echo "missing" > /shared/validator_config_keys
 echo "0,0" > /shared/validator_tcp_states
+echo "0" > /shared/validator_accept_queue
 echo "0:0" > /shared/validator_rocksdb_options
 echo "0" > /shared/validator_rocksdb_tmp_files
 echo "0" > /shared/validator_sigblk
@@ -479,6 +480,10 @@ while true; do
     CLOSE_WAIT=$(awk '$4 == "08" {count++} END {print count+0}' /proc/1/net/tcp 2>/dev/null || echo "0")
     TIME_WAIT=$(awk '$4 == "06" {count++} END {print count+0}' /proc/1/net/tcp 2>/dev/null || echo "0")
     echo "${CLOSE_WAIT},${TIME_WAIT}" > /shared/validator_tcp_states
+    # Write max accept queue depth across listening sockets
+    # In /proc/1/net/tcp, state 0A = LISTEN; column 2 (local_address) field after ':' is the accept queue length in hex
+    ACCEPT_Q_MAX=$(awk '$4 == "0A" {split($2, a, ":"); q=strtonum("0x"a[2]); if(q>m) m=q} END {print m+0}' /proc/1/net/tcp 2>/dev/null || echo "0")
+    echo "$ACCEPT_Q_MAX" > /shared/validator_accept_queue
     # Write RocksDB WAL (.log) file count for compaction health monitoring
     WAL_COUNT=$(find /var/ton-work/db -maxdepth 2 -name "*.log" -type f 2>/dev/null | wc -l)
     echo "$WAL_COUNT" > /shared/validator_wal_count

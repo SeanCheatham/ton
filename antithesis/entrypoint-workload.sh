@@ -144,6 +144,8 @@ sdk_catalog_always "Validator survives partial ADNL handshake flood"
 sdk_catalog_always "Validator survives simultaneous multi-port adversarial traffic"
 sdk_catalog_always "Validator process scheduling priority is stable when healthy"
 sdk_catalog_always "Validator survives time-bomb TCP connections"
+sdk_catalog_always "Validator survives protocol confusion attacks on all ports"
+sdk_catalog_always "Validator listening socket accept queue is bounded"
 sdk_catalog_always "Validator syscall I/O counts are advancing when healthy"
 echo "Assertion catalog emitted."
 
