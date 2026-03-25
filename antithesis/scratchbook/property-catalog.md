@@ -254,3 +254,24 @@ Antithesis assertions are embedded inline in `liteserver.cpp` to cover the lites
 | **Invariant** | `ALWAYS(state_consistent, "state survives restart")` |
 | **Antithesis Angle** | Crash + restart with fault injection during writes |
 | **Why It Matters** | Data integrity is fundamental to blockchain correctness |
+
+### In-Process C++ SDK Assertions — ADNL Layer (`adnl/adnl-peer.cpp`, `adnl/adnl-packet.cpp`)
+
+**REACHABLE markers:**
+- ADNL packet decrypted and processed
+- ADNL peer reinit triggered
+- ADNL channel created
+- ADNL packet basic checks passed
+
+**ALWAYS assertions:**
+- ADNL incoming seqno is positive
+- ADNL no duplicate seqno received
+- ADNL confirm seqno does not exceed sent seqno
+- ADNL channel confirm key matches
+- ADNL huge message size matches on completion
+- ADNL huge message hash verified
+- ADNL outgoing query ID is unique
+- ADNL message fits within MTU
+- ADNL packet flags are valid subset
+- ADNL packet has at most one message flag type
+- ADNL packet source IDs are consistent

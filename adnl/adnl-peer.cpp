@@ -26,6 +26,7 @@
 #include "adnl-peer.h"
 #include "adnl-peer.hpp"
 #include "utils.hpp"
+#include "antithesis_sdk.h"
 
 namespace ton {
 
@@ -170,6 +171,9 @@ void AdnlPeerPairImpl::receive_packet_checked(AdnlPacket packet) {
     return;
   }
   if (packet.seqno() > 0) {
+    ALWAYS(packet.seqno() > 0, "ADNL incoming seqno is positive", {{"seqno", static_cast<long long>(packet.seqno())}});
+    ALWAYS(!received_packet(packet.seqno()), "ADNL no duplicate seqno received",
+           {{"seqno", static_cast<long long>(packet.seqno())}});
     if (received_packet(packet.seqno())) {
       VLOG(ADNL_INFO) << this << ": dropping IN message: old seqno: " << packet.seqno() << " (current max " << in_seqno_
                       << ")";
@@ -177,6 +181,9 @@ void AdnlPeerPairImpl::receive_packet_checked(AdnlPacket packet) {
     }
   }
   if (packet.confirm_seqno() > 0) {
+    ALWAYS(packet.confirm_seqno() <= out_seqno_, "ADNL confirm seqno does not exceed sent seqno",
+           {{"confirm", static_cast<long long>(packet.confirm_seqno())},
+            {"out", static_cast<long long>(out_seqno_)}});
     if (packet.confirm_seqno() > out_seqno_) {
       VLOG(ADNL_WARNING) << this << ": dropping IN message: new ack seqno: " << packet.confirm_seqno()
                          << " (current max sent " << out_seqno_ << ")";
@@ -219,6 +226,7 @@ void AdnlPeerPairImpl::receive_packet_checked(AdnlPacket packet) {
   if (received_messages_ % 64 == 0) {
     VLOG(ADNL_INFO) << this << ": received " << received_messages_ << " messages";
   }
+  REACHABLE("ADNL packet decrypted and processed", {});
   for (auto &M : packet.messages().vector()) {
     deliver_message(std::move(M));
   }
@@ -335,6 +343,8 @@ void AdnlPeerPairImpl::send_messages_from_queue() {
         out_messages_queue_.pop();
         continue;
       }
+      ALWAYS(M.size() <= get_mtu(), "ADNL message fits within MTU",
+             {{"size", static_cast<long long>(M.size())}, {"mtu", static_cast<long long>(get_mtu())}});
       CHECK(M.size() <= get_mtu());
       if (s + M.size() <= AdnlNetworkManager::get_mtu()) {
         s += M.size();
@@ -472,6 +482,7 @@ void AdnlPeerPairImpl::send_packet_continue(AdnlPacket packet, td::actor::ActorI
 void AdnlPeerPairImpl::send_query(std::string name, td::Promise<td::BufferSlice> promise, td::Timestamp timeout,
                                   td::BufferSlice data, td::uint32 flags) {
   AdnlQueryId id = AdnlQuery::random_query_id();
+  ALWAYS(out_queries_.count(id) == 0, "ADNL outgoing query ID is unique", {});
   CHECK(out_queries_.count(id) == 0);
 
   auto P = [SelfId = actor_id(this)](AdnlQueryId id) {
@@ -538,6 +549,7 @@ void AdnlPeerPairImpl::create_channel(pubkeys::Ed25519 pub, td::uint32 date) {
   if (R.is_ok()) {
     channel_ = R.move_as_ok();
     channel_inited_ = true;
+    REACHABLE("ADNL channel created", {});
 
     td::actor::send_closure_later(peer_table_, &AdnlPeerTable::register_channel, channel_in_id_, local_id_,
                                   channel_.get());
@@ -551,6 +563,7 @@ void AdnlPeerPairImpl::process_message(const adnlmessage::AdnlMessageCreateChann
 }
 
 void AdnlPeerPairImpl::process_message(const adnlmessage::AdnlMessageConfirmChannel &message) {
+  ALWAYS(message.peer_key() == channel_pub_, "ADNL channel confirm key matches", {});
   if (message.peer_key() != channel_pub_) {
     VLOG(ADNL_NOTICE) << this << ": received adnl.message.confirmChannel with bad peer_key";
     return;
@@ -654,8 +667,13 @@ void AdnlPeerPairImpl::process_message(const adnlmessage::AdnlMessagePart &messa
     huge_message_offset_ += static_cast<td::uint32>(data.size());
 
     if (huge_message_offset_ == huge_message_.size()) {
+      ALWAYS(huge_message_offset_ == huge_message_.size(), "ADNL huge message size matches on completion",
+             {{"offset", static_cast<long long>(huge_message_offset_)},
+              {"total", static_cast<long long>(huge_message_.size())}});
       //td::actor::send_closure(local_actor_, &AdnlLocalId::deliver, peer_id_short_, std::move(huge_message_));
-      if (sha256_bits256(huge_message_.as_slice()) != huge_message_hash_) {
+      bool hash_matches = (sha256_bits256(huge_message_.as_slice()) == huge_message_hash_);
+      ALWAYS(hash_matches, "ADNL huge message hash verified", {});
+      if (!hash_matches) {
         VLOG(ADNL_WARNING) << this << ": dropping huge message: hash mismatch";
         return;
       }
@@ -693,6 +711,7 @@ void AdnlPeerPairImpl::reinit(td::int32 date) {
     reinit_date_ = date;
   }
   if (reinit_date_ < date) {
+    REACHABLE("ADNL peer reinit triggered", {});
     if (channel_inited_) {
       td::actor::send_closure(peer_table_, &AdnlPeerTable::unregister_channel, channel_in_id_);
     }
