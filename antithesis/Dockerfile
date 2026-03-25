@@ -44,9 +44,10 @@ RUN --mount=type=cache,target=/ton/build \
     cd /ton/build && \
     cmake -GNinja -DCMAKE_BUILD_TYPE=Release -DPORTABLE=1 -DTON_ARCH= -DTON_USE_JEMALLOC=ON \
           -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache .. && \
-    ninja validator-engine generate-random-id lite-client && \
+    ninja validator-engine generate-random-id lite-client func create-state gen_fif && \
     mkdir -p /build-out && \
-    cp validator-engine/validator-engine utils/generate-random-id lite-client/lite-client /build-out/
+    cp validator-engine/validator-engine utils/generate-random-id lite-client/lite-client \
+       crypto/create-state /build-out/
 
 # ---------------------------------------------------------------------------
 # Runtime image: validator-engine (SUT)
@@ -62,9 +63,17 @@ RUN mkdir -p /var/ton-work/db /var/ton-work/scripts /symbols
 
 COPY --from=builder /build-out/validator-engine /usr/local/bin/
 COPY --from=builder /build-out/generate-random-id /usr/local/bin/
+COPY --from=builder /build-out/create-state /usr/local/bin/
 
 # Expose debug symbols for Antithesis symbolization
 RUN ln -s /usr/local/bin/validator-engine /symbols/validator-engine
+
+# Fift interpreter library files (standard library + smart contract definitions).
+# create-state preloads Fift.fif and CreateState.fif from these paths at startup.
+COPY --from=builder /ton/crypto/fift/lib /usr/local/share/ton/fift/lib
+COPY --from=builder /ton/crypto/smartcont /usr/local/share/ton/smartcont
+
+COPY antithesis/antithesis-zerostate.fif /usr/local/share/ton/antithesis-zerostate.fif
 
 COPY antithesis/setup-complete.sh /usr/local/bin/setup-complete.sh
 RUN chmod +x /usr/local/bin/setup-complete.sh

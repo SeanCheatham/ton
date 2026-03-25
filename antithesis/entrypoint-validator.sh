@@ -17,7 +17,84 @@ IP="0.0.0.0"
 
 mkdir -p "${DB_ROOT}/keyring"
 
-# If no global config exists, create a minimal one for standalone operation
+# ---------------------------------------------------------------------------
+# Zerostate generation with Simplex consensus (ConfigParam 30)
+#
+# Creates a real masterchain zerostate that enables the new Simplex consensus
+# protocol for both the masterchain and workchain 0. A fresh ed25519 validator
+# signing key is generated on every first boot, placed in the keyring, and
+# included in the initial validator set so the engine immediately acts as the
+# sole validator without requiring an election round.
+#
+# Output files written to ${DB_ROOT}/static/ using the file hash as the
+# filename, which is the path validator-engine looks up on startup.
+# ---------------------------------------------------------------------------
+STATIC_DIR="${DB_ROOT}/static"
+if [ ! -f "${STATIC_DIR}/.zerostate_generated" ]; then
+    echo "Generating zerostate with Simplex consensus (ConfigParam 30)..."
+    ZEROSTATE_DIR="/tmp/zerostate-gen"
+    mkdir -p "${ZEROSTATE_DIR}"
+
+    # Generate a fresh ed25519 signing key for this validator instance.
+    # generate-random-id -m id outputs three JSON lines:
+    #   1: {"@type":"pk.ed25519","key":"<base64>"}   private key
+    #   2: {"@type":"pub.ed25519","key":"<base64>"}   public key
+    #   3: {"@type":"adnl.id.short","id":"<base64>"}  ADNL short ID (key hash)
+    VAL_KEY_OUTPUT=$(generate-random-id -m id)
+    VAL_PRIV_B64=$(echo "$VAL_KEY_OUTPUT" | sed -n '1p' | jq -r '.key')
+    VAL_PUB_B64=$(echo "$VAL_KEY_OUTPUT"  | sed -n '2p' | jq -r '.key')
+    VAL_ID_B64=$(echo "$VAL_KEY_OUTPUT"   | sed -n '3p' | jq -r '.id')
+
+    # Hex of the public key for the Fift validator entry.
+    VAL_PUB_HEX=$(echo "$VAL_PUB_B64" | base64 -d | od -A n -v -t x1 | tr -d ' \n')
+    # Uppercase hex of the ADNL ID for the keyring filename.
+    VAL_ID_HEX=$(echo "$VAL_ID_B64" | base64 -d | od -A n -v -t x1 | tr -d ' \n' | tr 'a-z' 'A-Z')
+
+    # Store the private key in the keyring.
+    # Format: 4-byte magic 0x17234849 followed by the 32-byte raw private key.
+    {
+        printf '\x17\x23\x68\x49'
+        echo "$VAL_PRIV_B64" | base64 -d
+    } > "${DB_ROOT}/keyring/${VAL_ID_HEX}"
+    chmod 600 "${DB_ROOT}/keyring/${VAL_ID_HEX}"
+
+    # Substitute the validator public key into the Fift script template and run it.
+    sed "s/%%VAL_PUB_HEX%%/${VAL_PUB_HEX}/g" \
+        /usr/local/share/ton/antithesis-zerostate.fif \
+        > "${ZEROSTATE_DIR}/gen-zerostate.fif"
+
+    (
+        cd "${ZEROSTATE_DIR}"
+        create-state \
+            -I /usr/local/share/ton/fift/lib \
+            -I /usr/local/share/ton/smartcont \
+            -s gen-zerostate.fif
+    )
+
+    # .fhash/.rhash files contain raw 32-byte hashes written by the Fift script.
+    ROOT_HASH_B64=$(base64 -w 0 < "${ZEROSTATE_DIR}/zerostate.rhash")
+    FILE_HASH_B64=$(base64 -w 0 < "${ZEROSTATE_DIR}/zerostate.fhash")
+    FILE_HASH_HEX=$(od -A n -v -t x1 "${ZEROSTATE_DIR}/zerostate.fhash" | tr -d ' \n' | tr 'a-z' 'A-Z')
+    SHARD_FILE_HASH_HEX=$(od -A n -v -t x1 "${ZEROSTATE_DIR}/basestate0.fhash" | tr -d ' \n' | tr 'a-z' 'A-Z')
+
+    # Place BOC files in static/ using the file hash as filename.
+    # validator-engine resolves the zerostate by looking up static/{FILE_HASH}.
+    mkdir -p "${STATIC_DIR}"
+    cp "${ZEROSTATE_DIR}/zerostate.boc"  "${STATIC_DIR}/${FILE_HASH_HEX}"
+    cp "${ZEROSTATE_DIR}/basestate0.boc" "${STATIC_DIR}/${SHARD_FILE_HASH_HEX}"
+
+    # Write the global config pointing at the real zerostate hashes.
+    cat > "${GLOBAL_CONFIG}" <<GCEOF
+{"@type":"config.global","dht":{"@type":"dht.config.global","k":6,"a":3,"static_nodes":{"@type":"dht.nodes","nodes":[]}},"liteservers":[],"validator":{"@type":"validator.config.global","zero_state":{"workchain":-1,"shard":-9223372036854775808,"seqno":0,"root_hash":"${ROOT_HASH_B64}","file_hash":"${FILE_HASH_B64}"}}}
+GCEOF
+
+    touch "${STATIC_DIR}/.zerostate_generated"
+    echo "Zerostate generation complete. root_hash=${ROOT_HASH_B64} file_hash=${FILE_HASH_B64}"
+fi
+
+# If no global config exists for any other reason, create a minimal placeholder.
+# This branch should not be reached after the zerostate generation above, but
+# is kept as a safe fallback so the validator can still start.
 if [ ! -f "${GLOBAL_CONFIG}" ]; then
     echo '{"@type":"config.global","dht":{"@type":"dht.config.global","k":6,"a":3,"static_nodes":{"@type":"dht.nodes","nodes":[]}},"liteservers":[],"validator":{"@type":"validator.config.global","zero_state":{"workchain":-1,"shard":-9223372036854775808,"seqno":0,"root_hash":"AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=","file_hash":"AgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgI="}}}' > "${GLOBAL_CONFIG}"
 fi
