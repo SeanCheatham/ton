@@ -1,8 +1,8 @@
 // Zerostate generation script for Antithesis single-validator setup.
 // Enables Simplex consensus (ConfigParam 30) for both masterchain and workchain 0.
 //
-// Runtime substitution: %%VAL_PUB_HEX%% is replaced with the validator's
-// ed25519 public key in hex before this script is executed.
+// Runtime substitution: %%VAL1_PUB_HEX%%, %%VAL2_PUB_HEX%%, %%VAL3_PUB_HEX%% are replaced
+// with each validator's ed25519 public key in hex before this script is executed.
 //
 // create-state auto-preloads Fift.fif and CreateState.fif before running this.
 
@@ -197,8 +197,12 @@ config.param_proposals_setup!
 // deposit bit_pps cell_pps
 GR$100 1 500 config.complaint_prices!
 
-// Initial validator set: single validator for Antithesis standalone testing
-B{%%VAL_PUB_HEX%%} 17 add-validator
+// Initial validator set: three validators for Antithesis multi-validator consensus testing.
+// Runtime substitution: %%VAL1_PUB_HEX%%, %%VAL2_PUB_HEX%%, %%VAL3_PUB_HEX%% are replaced
+// with each validator's ed25519 public key in hex before this script is executed.
+B{%%VAL1_PUB_HEX%%} 17 add-validator
+B{%%VAL2_PUB_HEX%%} 17 add-validator
+B{%%VAL3_PUB_HEX%%} 17 add-validator
 now dup 3600 + 1 config.validators!
 
 // ConfigParam 30: enable Simplex (new) consensus for masterchain and workchain 0.

@@ -2,9 +2,12 @@
 set -euo pipefail
 
 # Entrypoint for the TON validator-engine in the Antithesis environment.
-# Starts validator-engine with a minimal local configuration that includes
-# liteserver (TCP) and control/console (TCP) interfaces in addition to the
-# main UDP P2P port.
+# Supports multi-validator consensus testing via a shared-volume genesis
+# rendezvous protocol. The genesis coordinator (IS_GENESIS_COORDINATOR=true)
+# waits for all validators to publish their public keys and signed DHT entries,
+# then generates the zerostate and global config. Non-coordinators wait for
+# the coordinator to finish before copying the shared genesis into their local
+# DB dirs.
 
 DB_ROOT="/var/ton-work/db"
 GLOBAL_CONFIG="${DB_ROOT}/ton-global.config"
@@ -15,85 +18,207 @@ THREADS="${THREADS:-2}"
 VERBOSITY="${VERBOSITY:-3}"
 IP="0.0.0.0"
 
+NUM_VALIDATORS="${NUM_VALIDATORS:-1}"
+IS_GENESIS_COORDINATOR="${IS_GENESIS_COORDINATOR:-true}"
+VALIDATOR_INDEX="${VALIDATOR_INDEX:-1}"
+
+# Metric file prefix and log/liteserver paths. Validator index 1 uses the
+# legacy naming (/shared/validator_*) for backward-compatibility with existing
+# test drivers. Validators 2+ use indexed names (/shared/validator2_*, etc.).
+if [ "${VALIDATOR_INDEX}" = "1" ]; then
+    METRIC_PREFIX="/shared/validator"
+    LOG_FILE="/shared/validator.log"
+    LITESERVER_CONFIG="/shared/liteserver.config.json"
+else
+    METRIC_PREFIX="/shared/validator${VALIDATOR_INDEX}"
+    LOG_FILE="/shared/validator${VALIDATOR_INDEX}.log"
+    LITESERVER_CONFIG="/shared/liteserver${VALIDATOR_INDEX}.config.json"
+fi
+
 mkdir -p "${DB_ROOT}/keyring"
 
 # ---------------------------------------------------------------------------
-# Zerostate generation with Simplex consensus (ConfigParam 30)
+# Multi-validator genesis coordination
 #
-# Creates a real masterchain zerostate that enables the new Simplex consensus
-# protocol for both the masterchain and workchain 0. A fresh ed25519 validator
-# signing key is generated on every first boot, placed in the keyring, and
-# included in the initial validator set so the engine immediately acts as the
-# sole validator without requiring an election round.
+# Uses /shared/genesis/ as a rendezvous point. Each validator generates its
+# own ed25519 signing key, publishes its public key and a signed DHT node
+# entry (which includes its runtime IP), then waits for the coordinator to
+# assemble the shared zerostate and global config.
 #
-# Output files written to ${DB_ROOT}/static/ using the file hash as the
-# filename, which is the path validator-engine looks up on startup.
+# Phases:
+#   A (all validators): generate keypair → publish pubkey + DHT entry
+#   B (coordinator only): wait for all pubkeys + DHT entries → generate
+#                         zerostate → write global config → touch sentinel
+#   C (all validators): wait for sentinel → copy genesis → proceed
+#
+# On container restart the sentinel .genesis_ready already exists and the
+# local .zerostate_generated marker skips re-generation entirely.
 # ---------------------------------------------------------------------------
 STATIC_DIR="${DB_ROOT}/static"
+GENESIS_DIR="/shared/genesis"
+GENESIS_PUBKEYS_DIR="${GENESIS_DIR}/pubkeys"
+GENESIS_DHT_DIR="${GENESIS_DIR}/dht"
+GENESIS_STATIC_DIR="${GENESIS_DIR}/static"
+GENESIS_SENTINEL="${GENESIS_DIR}/.genesis_ready"
+
 if [ ! -f "${STATIC_DIR}/.zerostate_generated" ]; then
-    echo "Generating zerostate with Simplex consensus (ConfigParam 30)..."
-    ZEROSTATE_DIR="/tmp/zerostate-gen"
-    mkdir -p "${ZEROSTATE_DIR}"
+    mkdir -p "${GENESIS_DIR}" "${GENESIS_PUBKEYS_DIR}" "${GENESIS_DHT_DIR}" "${GENESIS_STATIC_DIR}"
 
-    # Generate a fresh ed25519 signing key for this validator instance.
-    # generate-random-id -m id outputs three JSON lines:
-    #   1: {"@type":"pk.ed25519","key":"<base64>"}   private key
-    #   2: {"@type":"pub.ed25519","key":"<base64>"}   public key
-    #   3: {"@type":"adnl.id.short","id":"<base64>"}  ADNL short ID (key hash)
-    VAL_KEY_OUTPUT=$(generate-random-id -m id)
-    VAL_PRIV_B64=$(echo "$VAL_KEY_OUTPUT" | sed -n '1p' | jq -r '.key')
-    VAL_PUB_B64=$(echo "$VAL_KEY_OUTPUT"  | sed -n '2p' | jq -r '.key')
-    VAL_ID_B64=$(echo "$VAL_KEY_OUTPUT"   | sed -n '3p' | jq -r '.id')
+    # ------------------------------------------------------------------
+    # Phase A: Generate own keypair and publish pubkey + DHT entry.
+    # Idempotent: skipped on container restart if already published.
+    # ------------------------------------------------------------------
+    if [ ! -f "${GENESIS_PUBKEYS_DIR}/${HOSTNAME}.hex" ]; then
+        echo "Phase A: Generating validator key (index=${VALIDATOR_INDEX})..."
 
-    # Hex of the public key for the Fift validator entry.
-    VAL_PUB_HEX=$(echo "$VAL_PUB_B64" | base64 -d | od -A n -v -t x1 | tr -d ' \n')
-    # Uppercase hex of the ADNL ID for the keyring filename.
-    VAL_ID_HEX=$(echo "$VAL_ID_B64" | base64 -d | od -A n -v -t x1 | tr -d ' \n' | tr 'a-z' 'A-Z')
+        # generate-random-id -m id outputs three JSON lines:
+        #   1: {"@type":"pk.ed25519","key":"<base64>"}   private key
+        #   2: {"@type":"pub.ed25519","key":"<base64>"}   public key
+        #   3: {"@type":"adnl.id.short","id":"<base64>"}  ADNL short ID (key hash)
+        VAL_KEY_OUTPUT=$(generate-random-id -m id)
+        VAL_PRIV_B64=$(echo "$VAL_KEY_OUTPUT" | sed -n '1p' | jq -r '.key')
+        VAL_PUB_B64=$(echo "$VAL_KEY_OUTPUT"  | sed -n '2p' | jq -r '.key')
+        VAL_ID_B64=$(echo "$VAL_KEY_OUTPUT"   | sed -n '3p' | jq -r '.id')
 
-    # Store the private key in the keyring.
-    # Format: 4-byte magic 0x17234849 followed by the 32-byte raw private key.
-    {
-        printf '\x17\x23\x68\x49'
-        echo "$VAL_PRIV_B64" | base64 -d
-    } > "${DB_ROOT}/keyring/${VAL_ID_HEX}"
-    chmod 600 "${DB_ROOT}/keyring/${VAL_ID_HEX}"
+        # Hex of the public key for the Fift validator entry.
+        VAL_PUB_HEX=$(echo "$VAL_PUB_B64" | base64 -d | od -A n -v -t x1 | tr -d ' \n')
+        # Uppercase hex of the ADNL ID for the keyring filename.
+        VAL_ID_HEX=$(echo "$VAL_ID_B64" | base64 -d | od -A n -v -t x1 | tr -d ' \n' | tr 'a-z' 'A-Z')
 
-    # Substitute the validator public key into the Fift script template and run it.
-    sed "s/%%VAL_PUB_HEX%%/${VAL_PUB_HEX}/g" \
-        /usr/local/share/ton/antithesis-zerostate.fif \
-        > "${ZEROSTATE_DIR}/gen-zerostate.fif"
+        # Store the private key in the keyring.
+        # Format: 4-byte magic 0x17234849 followed by the 32-byte raw private key.
+        {
+            printf '\x17\x23\x68\x49'
+            echo "$VAL_PRIV_B64" | base64 -d
+        } > "${DB_ROOT}/keyring/${VAL_ID_HEX}"
+        chmod 600 "${DB_ROOT}/keyring/${VAL_ID_HEX}"
 
-    (
-        cd "${ZEROSTATE_DIR}"
-        create-state \
-            -I /usr/local/share/ton/fift/lib \
-            -I /usr/local/share/ton/smartcont \
-            -s gen-zerostate.fif
-    )
+        # Publish public key for the coordinator to include in the zerostate.
+        echo "${VAL_PUB_HEX}" > "${GENESIS_PUBKEYS_DIR}/${HOSTNAME}.hex"
 
-    # .fhash/.rhash files contain raw 32-byte hashes written by the Fift script.
-    ROOT_HASH_B64=$(base64 -w 0 < "${ZEROSTATE_DIR}/zerostate.rhash")
-    FILE_HASH_B64=$(base64 -w 0 < "${ZEROSTATE_DIR}/zerostate.fhash")
-    FILE_HASH_HEX=$(od -A n -v -t x1 "${ZEROSTATE_DIR}/zerostate.fhash" | tr -d ' \n' | tr 'a-z' 'A-Z')
-    SHARD_FILE_HASH_HEX=$(od -A n -v -t x1 "${ZEROSTATE_DIR}/basestate0.fhash" | tr -d ' \n' | tr 'a-z' 'A-Z')
+        # Generate and publish a signed DHT node entry so the coordinator can
+        # embed it in the global config as a bootstrap node. The entry binds
+        # our ADNL public key to our current container IP and VALIDATOR_PORT.
+        #
+        # generate-random-id -m dht reads the standard TON keyring file format
+        # (4-byte magic 0x17234849 + 32-byte raw ed25519 key) and signs the
+        # serialized dht.nodeToSign TL object, producing a valid dht.node JSON.
+        MY_IP=$(hostname -i | awk '{print $1}')
+        # Convert IPv4 dotted-decimal to a signed 32-bit integer as required by
+        # the adnl.address.udp TL type.
+        IP_INT=$(echo "${MY_IP}" | awk -F. '{
+            raw = $1 * 16777216 + $2 * 65536 + $3 * 256 + $4
+            if (raw >= 2147483648) raw -= 4294967296
+            print raw
+        }')
+        ADDR_LIST_JSON="{\"@type\":\"adnl.addressList\",\"addrs\":[{\"@type\":\"adnl.address.udp\",\"ip\":${IP_INT},\"port\":${VALIDATOR_PORT}}],\"version\":0,\"reinit_date\":0,\"priority\":0,\"expire_at\":0}"
+        generate-random-id -m dht \
+            -k "${DB_ROOT}/keyring/${VAL_ID_HEX}" \
+            -a "${ADDR_LIST_JSON}" \
+            > "${GENESIS_DHT_DIR}/${HOSTNAME}.json"
 
-    # Place BOC files in static/ using the file hash as filename.
-    # validator-engine resolves the zerostate by looking up static/{FILE_HASH}.
-    mkdir -p "${STATIC_DIR}"
-    cp "${ZEROSTATE_DIR}/zerostate.boc"  "${STATIC_DIR}/${FILE_HASH_HEX}"
-    cp "${ZEROSTATE_DIR}/basestate0.boc" "${STATIC_DIR}/${SHARD_FILE_HASH_HEX}"
+        echo "Phase A complete: pubkey and DHT entry published for ${HOSTNAME} (IP: ${MY_IP})"
+    else
+        echo "Phase A: keypair already published for ${HOSTNAME}, skipping."
+    fi
 
-    # Write the global config pointing at the real zerostate hashes.
-    cat > "${GLOBAL_CONFIG}" <<GCEOF
-{"@type":"config.global","dht":{"@type":"dht.config.global","k":6,"a":3,"static_nodes":{"@type":"dht.nodes","nodes":[]}},"liteservers":[],"validator":{"@type":"validator.config.global","zero_state":{"workchain":-1,"shard":-9223372036854775808,"seqno":0,"root_hash":"${ROOT_HASH_B64}","file_hash":"${FILE_HASH_B64}"}}}
+    # ------------------------------------------------------------------
+    # Phase B (coordinator only): wait for all validators, generate
+    # zerostate and global config, touch sentinel.
+    # ------------------------------------------------------------------
+    if [ "${IS_GENESIS_COORDINATOR}" = "true" ] && [ ! -f "${GENESIS_SENTINEL}" ]; then
+        echo "Phase B: Coordinator waiting for ${NUM_VALIDATORS} validators to publish keys..."
+        WAIT_SECONDS=0
+        while true; do
+            PUBKEY_COUNT=$(ls "${GENESIS_PUBKEYS_DIR}"/*.hex 2>/dev/null | wc -l || echo 0)
+            DHT_COUNT=$(ls "${GENESIS_DHT_DIR}"/*.json 2>/dev/null | wc -l || echo 0)
+            if [ "${PUBKEY_COUNT}" -ge "${NUM_VALIDATORS}" ] && [ "${DHT_COUNT}" -ge "${NUM_VALIDATORS}" ]; then
+                echo "All ${NUM_VALIDATORS} validators have published (pubkeys=${PUBKEY_COUNT} dht=${DHT_COUNT})"
+                break
+            fi
+            if [ "${WAIT_SECONDS}" -ge 120 ]; then
+                echo "WARNING: Only ${PUBKEY_COUNT}/${NUM_VALIDATORS} pubkeys and ${DHT_COUNT}/${NUM_VALIDATORS} DHT entries after 120s; proceeding with available validators."
+                break
+            fi
+            sleep 2
+            WAIT_SECONDS=$((WAIT_SECONDS + 2))
+        done
+
+        echo "Phase B: Generating zerostate with ${NUM_VALIDATORS} validators..."
+        ZEROSTATE_DIR="/tmp/zerostate-gen"
+        mkdir -p "${ZEROSTATE_DIR}"
+
+        # Read each validator's public key in sorted order so the set is stable.
+        PUBKEY_FILES=($(ls "${GENESIS_PUBKEYS_DIR}"/*.hex | sort | head -"${NUM_VALIDATORS}"))
+        VAL1_PUB_HEX=$(cat "${PUBKEY_FILES[0]}")
+        VAL2_PUB_HEX=$(cat "${PUBKEY_FILES[1]:-/dev/null}" 2>/dev/null || echo "${VAL1_PUB_HEX}")
+        VAL3_PUB_HEX=$(cat "${PUBKEY_FILES[2]:-/dev/null}" 2>/dev/null || echo "${VAL1_PUB_HEX}")
+
+        sed -e "s/%%VAL1_PUB_HEX%%/${VAL1_PUB_HEX}/g" \
+            -e "s/%%VAL2_PUB_HEX%%/${VAL2_PUB_HEX}/g" \
+            -e "s/%%VAL3_PUB_HEX%%/${VAL3_PUB_HEX}/g" \
+            /usr/local/share/ton/antithesis-zerostate.fif \
+            > "${ZEROSTATE_DIR}/gen-zerostate.fif"
+
+        (
+            cd "${ZEROSTATE_DIR}"
+            create-state \
+                -I /usr/local/share/ton/fift/lib \
+                -I /usr/local/share/ton/smartcont \
+                -s gen-zerostate.fif
+        )
+
+        # .fhash/.rhash files contain raw 32-byte hashes written by the Fift script.
+        ROOT_HASH_B64=$(base64 -w 0 < "${ZEROSTATE_DIR}/zerostate.rhash")
+        FILE_HASH_B64=$(base64 -w 0 < "${ZEROSTATE_DIR}/zerostate.fhash")
+        FILE_HASH_HEX=$(od -A n -v -t x1 "${ZEROSTATE_DIR}/zerostate.fhash" | tr -d ' \n' | tr 'a-z' 'A-Z')
+        SHARD_FILE_HASH_HEX=$(od -A n -v -t x1 "${ZEROSTATE_DIR}/basestate0.fhash" | tr -d ' \n' | tr 'a-z' 'A-Z')
+
+        # Place BOC files in the shared genesis static dir (keyed by file hash).
+        cp "${ZEROSTATE_DIR}/zerostate.boc"  "${GENESIS_STATIC_DIR}/${FILE_HASH_HEX}"
+        cp "${ZEROSTATE_DIR}/basestate0.boc" "${GENESIS_STATIC_DIR}/${SHARD_FILE_HASH_HEX}"
+
+        # Collect all DHT node entries into a JSON array for the global config.
+        # Each file contains one signed dht.node JSON object.
+        DHT_NODES=$(jq -s '.' "${GENESIS_DHT_DIR}"/*.json | jq -c 'map(.) | .[0:'"${NUM_VALIDATORS}"']')
+
+        # Write the global config with all validators as DHT bootstrap nodes.
+        cat > "${GENESIS_DIR}/ton-global.config" <<GCEOF
+{"@type":"config.global","dht":{"@type":"dht.config.global","k":6,"a":3,"static_nodes":{"@type":"dht.nodes","nodes":${DHT_NODES}}},"liteservers":[],"validator":{"@type":"validator.config.global","zero_state":{"workchain":-1,"shard":-9223372036854775808,"seqno":0,"root_hash":"${ROOT_HASH_B64}","file_hash":"${FILE_HASH_B64}"}}}
 GCEOF
 
+        sync
+        touch "${GENESIS_SENTINEL}"
+        echo "Phase B complete. root_hash=${ROOT_HASH_B64} file_hash=${FILE_HASH_B64}"
+    fi
+
+    # ------------------------------------------------------------------
+    # Phase C: Wait for genesis sentinel, then copy shared files locally.
+    # ------------------------------------------------------------------
+    if [ ! -f "${GENESIS_SENTINEL}" ]; then
+        echo "Phase C: Waiting for genesis coordinator to finish..."
+        WAIT_SECONDS=0
+        while [ ! -f "${GENESIS_SENTINEL}" ]; do
+            if [ "${WAIT_SECONDS}" -ge 120 ]; then
+                echo "ERROR: Genesis not ready after 120s. Aborting."
+                exit 1
+            fi
+            sleep 2
+            WAIT_SECONDS=$((WAIT_SECONDS + 2))
+        done
+        echo "Phase C: Genesis sentinel detected."
+    fi
+
+    # Copy zerostate BOC files and global config from shared genesis to local DB.
+    mkdir -p "${STATIC_DIR}"
+    cp "${GENESIS_STATIC_DIR}/"* "${STATIC_DIR}/"
+    cp "${GENESIS_DIR}/ton-global.config" "${GLOBAL_CONFIG}"
     touch "${STATIC_DIR}/.zerostate_generated"
-    echo "Zerostate generation complete. root_hash=${ROOT_HASH_B64} file_hash=${FILE_HASH_B64}"
+    echo "Genesis files installed (index=${VALIDATOR_INDEX})."
 fi
 
 # If no global config exists for any other reason, create a minimal placeholder.
-# This branch should not be reached after the zerostate generation above, but
+# This branch should not be reached after the genesis coordination above, but
 # is kept as a safe fallback so the validator can still start.
 if [ ! -f "${GLOBAL_CONFIG}" ]; then
     echo '{"@type":"config.global","dht":{"@type":"dht.config.global","k":6,"a":3,"static_nodes":{"@type":"dht.nodes","nodes":[]}},"liteservers":[],"validator":{"@type":"validator.config.global","zero_state":{"workchain":-1,"shard":-9223372036854775808,"seqno":0,"root_hash":"AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=","file_hash":"AgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgI="}}}' > "${GLOBAL_CONFIG}"
@@ -154,7 +279,7 @@ if [ -f "${DB_ROOT}/config.json" ]; then
         # IP is encoded as a signed 32-bit integer. For the Docker network, the workload
         # uses the hostname "validator" via -a flag, but we still need the key for auth.
         # Use 2130706433 (127.0.0.1) as placeholder — workload overrides with -a flag.
-        cat > /shared/liteserver.config.json <<LITEEOF
+        cat > "${LITESERVER_CONFIG}" <<LITEEOF
 {
     "@type": "config.global",
     "liteservers": [
@@ -170,7 +295,7 @@ if [ -f "${DB_ROOT}/config.json" ]; then
     ]
 }
 LITEEOF
-        echo "Liteserver config exported to /shared/liteserver.config.json"
+        echo "Liteserver config exported to ${LITESERVER_CONFIG}"
     else
         echo "Warning: could not extract liteserver key from config.json"
     fi
@@ -200,90 +325,95 @@ _HEARTBEAT_COUNTER=0
 # (disk_usage, manifest_count, etc.) are written much later. Without initialization,
 # the metrics_complete driver can see a fresh heartbeat but find files missing on the
 # first iteration. Consuming drivers treat "-1" as "not yet checked" and skip gracefully.
-echo "-1" > /shared/validator_tcp_bound
-echo "-1" > /shared/validator_udp_bound
-echo "-1" > /shared/validator_fd_count
-echo "-1" > /shared/validator_mem_rss
-echo "-1" > /shared/validator_sock_count
-echo "-1" > /shared/validator_cpu_ticks
-echo "?" > /shared/validator_proc_state
-echo "-1" > /shared/validator_io_ticks
-echo "-1" > /shared/validator_thread_count
-echo "-1" > /shared/validator_swap_kb
-echo "-1" > /shared/validator_mem_peak
-echo "0" > /shared/validator_deleted_fds
-echo "-1" > /shared/validator_net_bytes
-echo "-1" > /shared/validator_net_errors
-echo "-1:-1" > /shared/validator_ctxt_switches
-echo "-1" > /shared/validator_oom_score
-echo "-1" > /shared/validator_io_bytes
-echo "0" > /shared/validator_unexpected_fds
-echo "-1" > /shared/validator_db_mtime
-echo "0" > /shared/validator_db_size
-echo "0" > /shared/validator_db_lock
-echo "-1" > /shared/validator_config_valid
-echo "0" > /shared/validator_wal_count
-echo "-1" > /shared/validator_disk_usage
-echo "0" > /shared/validator_manifest_count
-echo "0" > /shared/validator_current_valid
-echo "-1" > /shared/validator_global_config_valid
-echo "0" > /shared/validator_rocksdb_errors
-echo "0" > /shared/validator_sst_count
-echo "-1" > /shared/validator_current_manifest_consistent
-echo "missing" > /shared/validator_config_keys
-echo "0,0" > /shared/validator_tcp_states
-echo "0" > /shared/validator_accept_queue
-echo "0:0" > /shared/validator_rocksdb_options
-echo "0" > /shared/validator_rocksdb_tmp_files
-echo "0" > /shared/validator_sigblk
-echo "0:0" > /shared/validator_rss_history
-echo "0:0" > /shared/validator_fd_history
-echo "1" > /shared/validator_db_perms
-echo "0" > /shared/validator_zombie_count
-echo "-1" > /shared/validator_db_structure
-echo "0" > /shared/validator_keyring_count
-echo "-1" > /shared/validator_keyring_perms
-echo "unknown" > /shared/validator_cmdline_hash
-echo "0" > /shared/validator_db_dir_count
-echo "unknown" > /shared/validator_rocksdb_identity
-echo "unavailable" > /shared/validator_config_hash
-echo "0" > /shared/validator_manifest_size
-echo "0" > /shared/validator_compaction_count
-echo "0:0" > /shared/validator_thread_history
-echo "0:0" > /shared/validator_mmap_history
-echo "0:0" > /shared/validator_sock_history
-echo "-1" > /shared/validator_vmsize
-echo "0" > /shared/validator_rocksdb_log_size
-echo "0" > /shared/validator_rocksdb_write_stalls
-echo "unknown" > /shared/validator_pid1_comm
-echo "unknown" > /shared/validator_nice
-echo "-1" > /shared/validator_syscall_count
-echo "-1:-1" > /shared/validator_tcp_conn_failures
-echo "-1:-1" > /shared/validator_tcp_outrsts
-echo "0" > /shared/validator_loop_epoch
+echo "-1" > ${METRIC_PREFIX}_tcp_bound
+echo "-1" > ${METRIC_PREFIX}_udp_bound
+echo "-1" > ${METRIC_PREFIX}_fd_count
+echo "-1" > ${METRIC_PREFIX}_mem_rss
+echo "-1" > ${METRIC_PREFIX}_sock_count
+echo "-1" > ${METRIC_PREFIX}_cpu_ticks
+echo "?" > ${METRIC_PREFIX}_proc_state
+echo "-1" > ${METRIC_PREFIX}_io_ticks
+echo "-1" > ${METRIC_PREFIX}_thread_count
+echo "-1" > ${METRIC_PREFIX}_swap_kb
+echo "-1" > ${METRIC_PREFIX}_mem_peak
+echo "0" > ${METRIC_PREFIX}_deleted_fds
+echo "-1" > ${METRIC_PREFIX}_net_bytes
+echo "-1" > ${METRIC_PREFIX}_net_errors
+echo "-1:-1" > ${METRIC_PREFIX}_ctxt_switches
+echo "-1" > ${METRIC_PREFIX}_oom_score
+echo "-1" > ${METRIC_PREFIX}_io_bytes
+echo "0" > ${METRIC_PREFIX}_unexpected_fds
+echo "-1" > ${METRIC_PREFIX}_db_mtime
+echo "0" > ${METRIC_PREFIX}_db_size
+echo "0" > ${METRIC_PREFIX}_db_lock
+echo "-1" > ${METRIC_PREFIX}_config_valid
+echo "0" > ${METRIC_PREFIX}_wal_count
+echo "-1" > ${METRIC_PREFIX}_disk_usage
+echo "0" > ${METRIC_PREFIX}_manifest_count
+echo "0" > ${METRIC_PREFIX}_current_valid
+echo "-1" > ${METRIC_PREFIX}_global_config_valid
+echo "0" > ${METRIC_PREFIX}_rocksdb_errors
+echo "0" > ${METRIC_PREFIX}_sst_count
+echo "-1" > ${METRIC_PREFIX}_current_manifest_consistent
+echo "missing" > ${METRIC_PREFIX}_config_keys
+echo "0,0" > ${METRIC_PREFIX}_tcp_states
+echo "0" > ${METRIC_PREFIX}_accept_queue
+echo "0:0" > ${METRIC_PREFIX}_rocksdb_options
+echo "0" > ${METRIC_PREFIX}_rocksdb_tmp_files
+echo "0" > ${METRIC_PREFIX}_sigblk
+echo "0:0" > ${METRIC_PREFIX}_rss_history
+echo "0:0" > ${METRIC_PREFIX}_fd_history
+echo "1" > ${METRIC_PREFIX}_db_perms
+echo "0" > ${METRIC_PREFIX}_zombie_count
+echo "-1" > ${METRIC_PREFIX}_db_structure
+echo "0" > ${METRIC_PREFIX}_keyring_count
+echo "-1" > ${METRIC_PREFIX}_keyring_perms
+echo "unknown" > ${METRIC_PREFIX}_cmdline_hash
+echo "0" > ${METRIC_PREFIX}_db_dir_count
+echo "unknown" > ${METRIC_PREFIX}_rocksdb_identity
+echo "unavailable" > ${METRIC_PREFIX}_config_hash
+echo "0" > ${METRIC_PREFIX}_manifest_size
+echo "0" > ${METRIC_PREFIX}_compaction_count
+echo "0:0" > ${METRIC_PREFIX}_thread_history
+echo "0:0" > ${METRIC_PREFIX}_mmap_history
+echo "0:0" > ${METRIC_PREFIX}_sock_history
+echo "-1" > ${METRIC_PREFIX}_vmsize
+echo "0" > ${METRIC_PREFIX}_rocksdb_log_size
+echo "0" > ${METRIC_PREFIX}_rocksdb_write_stalls
+echo "unknown" > ${METRIC_PREFIX}_pid1_comm
+echo "unknown" > ${METRIC_PREFIX}_nice
+echo "-1" > ${METRIC_PREFIX}_syscall_count
+echo "-1:-1" > ${METRIC_PREFIX}_tcp_conn_failures
+echo "-1:-1" > ${METRIC_PREFIX}_tcp_outrsts
+echo "0" > ${METRIC_PREFIX}_loop_epoch
+echo "-1" > ${METRIC_PREFIX}_nofile_limit
+echo "0:0" > ${METRIC_PREFIX}_log_error_count
+echo "-1" > ${METRIC_PREFIX}_tcp_retrans
+echo "-1" > ${METRIC_PREFIX}_ip_errors
+echo "-1:-1" > ${METRIC_PREFIX}_udp_buf_errors
 # Write a unique startup generation ID so drivers can detect container restarts
 # and reset their cross-invocation state (e.g., first-observed IDENTITY).
-date +%s%N > /shared/validator_startup_id
+date +%s%N > ${METRIC_PREFIX}_startup_id
 while true; do
-    date +%s > /shared/validator_heartbeat
+    date +%s > ${METRIC_PREFIX}_heartbeat
 
     # On first heartbeat iteration, write an explicit initialization marker to the log.
     # TON's TsFileLog buffers aggressively and may not flush for extended periods,
     # so we guarantee at least one matching line exists for the log_operational assertion.
     if [ "$_FIRST_HEARTBEAT" = "true" ]; then
         _FIRST_HEARTBEAT=false
-        date +%s > /shared/validator_first_heartbeat
-        echo "[entrypoint] Validator block processing engine initializing, monitoring masterchain shard state" >> /shared/validator.log
+        date +%s > ${METRIC_PREFIX}_first_heartbeat
+        echo "[entrypoint] Validator block processing engine initializing, monitoring masterchain shard state" >> "${LOG_FILE}"
     fi
 
     # Periodic block-related heartbeat marker every ~60 seconds (12 iterations * 5s)
     _HEARTBEAT_COUNTER=$((_HEARTBEAT_COUNTER + 1))
     if [ $((_HEARTBEAT_COUNTER % 12)) -eq 0 ]; then
-        echo "[heartbeat] validator masterchain block monitoring - shard state check" >> /shared/validator.log
+        echo "[heartbeat] validator masterchain block monitoring - shard state check" >> "${LOG_FILE}"
     fi
 
     # Write PID 1 process name for identity monitoring
-    cat /proc/1/comm 2>/dev/null > /shared/validator_pid1_comm || true
+    cat /proc/1/comm 2>/dev/null > ${METRIC_PREFIX}_pid1_comm || true
 
     # === HIGH-PRIORITY METRICS (checked by assertions sensitive to staleness) ===
     # These run first so they are always fresh relative to the heartbeat timestamp.
@@ -303,23 +433,23 @@ while true; do
         if [ -n "$TCP_PORTS" ]; then
             if echo "$TCP_PORTS" | grep -qi ":7532 .*0A" && echo "$TCP_PORTS" | grep -qi ":7533 .*0A"; then
                 _TCP_EVER_BOUND=true
-                echo 1 > /shared/validator_tcp_bound
+                echo 1 > ${METRIC_PREFIX}_tcp_bound
             elif [ "$_TCP_EVER_BOUND" = "true" ]; then
-                echo 0 > /shared/validator_tcp_bound
+                echo 0 > ${METRIC_PREFIX}_tcp_bound
             else
-                touch /shared/validator_tcp_bound
+                touch ${METRIC_PREFIX}_tcp_bound
             fi
         else
-            touch /shared/validator_tcp_bound
+            touch ${METRIC_PREFIX}_tcp_bound
         fi
     else
-        touch /shared/validator_tcp_bound
+        touch ${METRIC_PREFIX}_tcp_bound
     fi
 
     # Write most recent DB file modification time for activity monitoring
     # Use -maxdepth 2 to avoid expensive full-tree traversal on large DBs.
     DB_MTIME=$(find /var/ton-work/db -maxdepth 2 -type f -printf '%T@\n' 2>/dev/null | sort -rn | head -1 | cut -d. -f1)
-    echo "${DB_MTIME:--1}" > /shared/validator_db_mtime
+    echo "${DB_MTIME:--1}" > ${METRIC_PREFIX}_db_mtime
 
     # Write UDP socket bound status for port 30001 (0x7531 in hex)
     # Check both /proc/1/net/udp (IPv4) and /proc/1/net/udp6 (IPv6) because
@@ -329,105 +459,105 @@ while true; do
         UDP_BOUND=${UDP_BOUND:-0}
         if [ "$UDP_BOUND" = "1" ]; then
             _UDP_EVER_BOUND=true
-            echo "1" > /shared/validator_udp_bound
+            echo "1" > ${METRIC_PREFIX}_udp_bound
         elif [ "$_UDP_EVER_BOUND" = "true" ]; then
-            echo "0" > /shared/validator_udp_bound
+            echo "0" > ${METRIC_PREFIX}_udp_bound
         else
-            touch /shared/validator_udp_bound
+            touch ${METRIC_PREFIX}_udp_bound
         fi
     else
-        touch /shared/validator_udp_bound
+        touch ${METRIC_PREFIX}_udp_bound
     fi
 
     # Refresh heartbeat after high-priority metrics
-    date +%s > /shared/validator_heartbeat
+    date +%s > ${METRIC_PREFIX}_heartbeat
 
     # === MEDIUM-PRIORITY METRICS (fast /proc reads) ===
 
     # Write open file descriptor count for resource monitoring
     FD_COUNT=$(ls /proc/1/fd 2>/dev/null | wc -l || echo "-1")
-    echo "$FD_COUNT" > /shared/validator_fd_count
+    echo "$FD_COUNT" > ${METRIC_PREFIX}_fd_count
     # Write NOFILE soft limit for resource headroom monitoring
     NOFILE_LIMIT=$(awk '/^Max open files/{print $4}' /proc/1/limits 2>/dev/null || echo "-1")
-    echo "$NOFILE_LIMIT" > /shared/validator_nofile_limit
+    echo "$NOFILE_LIMIT" > ${METRIC_PREFIX}_nofile_limit
     # Write resident set size (KB) for memory monitoring
     RSS_KB=$(awk '/VmRSS/{print $2}' /proc/1/status 2>/dev/null || echo "-1")
-    echo "$RSS_KB" > /shared/validator_mem_rss
+    echo "$RSS_KB" > ${METRIC_PREFIX}_mem_rss
     # Write open TCP socket count for connection leak monitoring
     SOCK_COUNT=$(wc -l < /proc/1/net/tcp 2>/dev/null || echo "-1")
     # Subtract 1 for the header line
     SOCK_COUNT=$((SOCK_COUNT - 1))
-    echo "$SOCK_COUNT" > /shared/validator_sock_count
+    echo "$SOCK_COUNT" > ${METRIC_PREFIX}_sock_count
     # Write cumulative CPU time (user + system ticks) for activity monitoring
     CPU_TICKS=$(awk '{print $14 + $15}' /proc/1/stat 2>/dev/null || echo "-1")
-    echo "$CPU_TICKS" > /shared/validator_cpu_ticks
+    echo "$CPU_TICKS" > ${METRIC_PREFIX}_cpu_ticks
     # Write process state (R=running, S=sleeping, D=uninterruptible, T=stopped, Z=zombie)
     PROC_STATE=$(awk '/^State:/{print $2}' /proc/1/status 2>/dev/null || echo "?")
-    echo "$PROC_STATE" > /shared/validator_proc_state
+    echo "$PROC_STATE" > ${METRIC_PREFIX}_proc_state
     # Write cumulative block I/O delay ticks (field 42 of /proc/1/stat)
     IO_TICKS=$(awk '{print $42}' /proc/1/stat 2>/dev/null || echo "-1")
-    echo "$IO_TICKS" > /shared/validator_io_ticks
+    echo "$IO_TICKS" > ${METRIC_PREFIX}_io_ticks
     # Write thread count for resource monitoring
     THREAD_COUNT=$(awk '/^Threads:/{print $2}' /proc/1/status 2>/dev/null || echo "-1")
-    echo "$THREAD_COUNT" > /shared/validator_thread_count
+    echo "$THREAD_COUNT" > ${METRIC_PREFIX}_thread_count
     # Write swap usage (KB) for memory quality monitoring
     SWAP_KB=$(awk '/VmSwap/{print $2}' /proc/1/status 2>/dev/null || echo "-1")
-    echo "$SWAP_KB" > /shared/validator_swap_kb
+    echo "$SWAP_KB" > ${METRIC_PREFIX}_swap_kb
     # Write signal blocked mask for signal disposition monitoring
     SIG_BLK=$(grep '^SigBlk:' /proc/1/status 2>/dev/null | awk '{print $2}')
-    echo "${SIG_BLK:-0}" > /shared/validator_sigblk
+    echo "${SIG_BLK:-0}" > ${METRIC_PREFIX}_sigblk
     # Write peak virtual memory (KB) — monotonically non-decreasing high-water mark
     VMPEAK_KB=$(awk '/VmPeak/{print $2}' /proc/1/status 2>/dev/null || echo "-1")
-    echo "$VMPEAK_KB" > /shared/validator_mem_peak
+    echo "$VMPEAK_KB" > ${METRIC_PREFIX}_mem_peak
     # Write current virtual memory size (KB) for address space leak detection
     VMSIZE_KB=$(awk '/VmSize/{print $2}' /proc/1/status 2>/dev/null || echo "-1")
-    echo "$VMSIZE_KB" > /shared/validator_vmsize
+    echo "$VMSIZE_KB" > ${METRIC_PREFIX}_vmsize
     # Write process nice value for scheduling priority stability monitoring
     # Field 19 of /proc/1/stat (1-indexed) is the nice value
     NICE_VAL=$(awk '{print $19}' /proc/1/stat 2>/dev/null || echo "unknown")
-    echo "$NICE_VAL" > /shared/validator_nice
+    echo "$NICE_VAL" > ${METRIC_PREFIX}_nice
     # Write count of leaked deleted file descriptors
     DELETED_FDS=$(ls -la /proc/1/fd 2>/dev/null | grep -c '(deleted)' || echo "0")
-    echo "$DELETED_FDS" > /shared/validator_deleted_fds
+    echo "$DELETED_FDS" > ${METRIC_PREFIX}_deleted_fds
     # Sum rx_bytes + tx_bytes across all interfaces (skip lo), fields 2 and 10
     NET_BYTES=$(awk 'NR>2 && $1 !~ /lo:/ {rx+=$2; tx+=$10} END {print rx+tx}' /proc/1/net/dev 2>/dev/null || echo "-1")
-    echo "$NET_BYTES" > /shared/validator_net_bytes
+    echo "$NET_BYTES" > ${METRIC_PREFIX}_net_bytes
     # Sum rx_errs + tx_errs + rx_drop + tx_drop across all interfaces (skip lo)
     NET_ERRORS=$(awk 'NR>2 && $1 !~ /lo:/ {e+=$4+$5+$12+$13} END {print e+0}' /proc/1/net/dev 2>/dev/null || echo "-1")
-    echo "$NET_ERRORS" > /shared/validator_net_errors
+    echo "$NET_ERRORS" > ${METRIC_PREFIX}_net_errors
     # Read TCP retransmission stats from /proc/1/net/snmp for protocol-level network health
     # Tcp row fields: $1=Tcp: $2...$12=OutSegs $13=RetransSegs (second Tcp: line has values)
     TCP_STATS=$(awk '/^Tcp:/{n++; if(n==2){print $12":"$13}}' /proc/1/net/snmp 2>/dev/null || echo "-1:-1")
-    echo "$TCP_STATS" > /shared/validator_tcp_retrans
+    echo "$TCP_STATS" > ${METRIC_PREFIX}_tcp_retrans
     # Read TCP connection failure stats from /proc/1/net/snmp
     # Tcp row fields on second line: $8=AttemptFails $9=EstabResets
     TCP_CONN_FAILURES=$(awk '/^Tcp:/{n++; if(n==2){print $8":"$9}}' /proc/1/net/snmp 2>/dev/null || echo "-1:-1")
-    echo "$TCP_CONN_FAILURES" > /shared/validator_tcp_conn_failures
+    echo "$TCP_CONN_FAILURES" > ${METRIC_PREFIX}_tcp_conn_failures
     # Read TCP reset stats from /proc/1/net/snmp for connection rejection monitoring
     # Tcp row fields on second line: $11=InSegs $15=OutRsts
     TCP_OUTRSTS=$(awk '/^Tcp:/{n++; if(n==2){print $11":"$15}}' /proc/1/net/snmp 2>/dev/null || echo "-1:-1")
-    echo "$TCP_OUTRSTS" > /shared/validator_tcp_outrsts
+    echo "$TCP_OUTRSTS" > ${METRIC_PREFIX}_tcp_outrsts
     # Read IP-level input errors from /proc/1/net/snmp
     # Ip row fields: $5=InHdrErrors $6=InAddrErrors (second Ip: line has values)
     IP_ERRORS=$(awk '/^Ip:/{n++; if(n==2){print $5+$6}}' /proc/1/net/snmp 2>/dev/null || echo "-1")
-    echo "$IP_ERRORS" > /shared/validator_ip_errors
+    echo "$IP_ERRORS" > ${METRIC_PREFIX}_ip_errors
     # Read UDP buffer error counts from /proc/1/net/snmp
     # Udp row: second line has values. RcvbufErrors is field 6, SndbufErrors is field 7
     UDP_BUF_ERRORS=$(awk '/^Udp:/{n++; if(n==2){print $6":"$7}}' /proc/1/net/snmp 2>/dev/null || echo "-1:-1")
-    echo "$UDP_BUF_ERRORS" > /shared/validator_udp_buf_errors
+    echo "$UDP_BUF_ERRORS" > ${METRIC_PREFIX}_udp_buf_errors
     # Write voluntary + nonvoluntary context switches for scheduling health monitoring
     VOL_CS=$(awk '/^voluntary_ctxt_switches:/{print $2}' /proc/1/status 2>/dev/null || echo "-1")
     NONVOL_CS=$(awk '/^nonvoluntary_ctxt_switches:/{print $2}' /proc/1/status 2>/dev/null || echo "-1")
-    echo "${VOL_CS}:${NONVOL_CS}" > /shared/validator_ctxt_switches
+    echo "${VOL_CS}:${NONVOL_CS}" > ${METRIC_PREFIX}_ctxt_switches
     # Write OOM score for OOM kill risk monitoring
     OOM_SCORE=$(cat /proc/1/oom_score 2>/dev/null || echo "-1")
-    echo "$OOM_SCORE" > /shared/validator_oom_score
+    echo "$OOM_SCORE" > ${METRIC_PREFIX}_oom_score
     # Write combined read_bytes + write_bytes from /proc/1/io for I/O throughput monitoring
     IO_BYTES=$(awk '/^(read_bytes|write_bytes):/{s+=$2} END{print s+0}' /proc/1/io 2>/dev/null || echo "-1")
-    echo "$IO_BYTES" > /shared/validator_io_bytes
+    echo "$IO_BYTES" > ${METRIC_PREFIX}_io_bytes
     # Write combined syscr + syscw from /proc/1/io for syscall activity monitoring
     SYSCALL_COUNT=$(awk '/^(syscr|syscw):/{s+=$2} END{print s+0}' /proc/1/io 2>/dev/null || echo "-1")
-    echo "$SYSCALL_COUNT" > /shared/validator_syscall_count
+    echo "$SYSCALL_COUNT" > ${METRIC_PREFIX}_syscall_count
     # Write count of unexpected file descriptor types
     UNEXPECTED_FDS=0
     for link in /proc/1/fd/*; do
@@ -441,42 +571,42 @@ while true; do
             *) UNEXPECTED_FDS=$((UNEXPECTED_FDS + 1)) ;;
         esac
     done
-    echo "$UNEXPECTED_FDS" > /shared/validator_unexpected_fds
+    echo "$UNEXPECTED_FDS" > ${METRIC_PREFIX}_unexpected_fds
     # Write count of zombie (Z state) processes for process hygiene monitoring
     ZOMBIE_COUNT=$(ls /proc/*/status 2>/dev/null | xargs grep -l "^State:.*Z" 2>/dev/null | wc -l || echo "0")
-    echo "$ZOMBIE_COUNT" > /shared/validator_zombie_count
+    echo "$ZOMBIE_COUNT" > ${METRIC_PREFIX}_zombie_count
 
     # Append RSS history for memory growth trajectory detection (keep last 20 entries)
     RSS_KB=$(awk '/VmRSS/{print $2}' /proc/1/status 2>/dev/null || echo "0")
-    echo "$(date +%s):${RSS_KB}" >> /shared/validator_rss_history
-    tail -20 /shared/validator_rss_history > /shared/validator_rss_history.tmp
-    mv /shared/validator_rss_history.tmp /shared/validator_rss_history
+    echo "$(date +%s):${RSS_KB}" >> ${METRIC_PREFIX}_rss_history
+    tail -20 ${METRIC_PREFIX}_rss_history > ${METRIC_PREFIX}_rss_history.tmp
+    mv ${METRIC_PREFIX}_rss_history.tmp ${METRIC_PREFIX}_rss_history
 
     # Append FD count history for FD growth trajectory detection (keep last 20 entries)
     FD_COUNT_NOW=$(ls /proc/1/fd 2>/dev/null | wc -l || echo "0")
-    echo "$(date +%s):${FD_COUNT_NOW}" >> /shared/validator_fd_history
-    tail -20 /shared/validator_fd_history > /shared/validator_fd_history.tmp
-    mv /shared/validator_fd_history.tmp /shared/validator_fd_history
+    echo "$(date +%s):${FD_COUNT_NOW}" >> ${METRIC_PREFIX}_fd_history
+    tail -20 ${METRIC_PREFIX}_fd_history > ${METRIC_PREFIX}_fd_history.tmp
+    mv ${METRIC_PREFIX}_fd_history.tmp ${METRIC_PREFIX}_fd_history
 
     # Append thread count history for thread growth trajectory detection (keep last 20 entries)
     THREAD_COUNT_NOW=$(awk '/^Threads:/{print $2}' /proc/1/status 2>/dev/null || echo "0")
-    echo "$(date +%s):${THREAD_COUNT_NOW}" >> /shared/validator_thread_history
-    tail -20 /shared/validator_thread_history > /shared/validator_thread_history.tmp
-    mv /shared/validator_thread_history.tmp /shared/validator_thread_history
+    echo "$(date +%s):${THREAD_COUNT_NOW}" >> ${METRIC_PREFIX}_thread_history
+    tail -20 ${METRIC_PREFIX}_thread_history > ${METRIC_PREFIX}_thread_history.tmp
+    mv ${METRIC_PREFIX}_thread_history.tmp ${METRIC_PREFIX}_thread_history
 
     # Append mmap count history for mapping growth trajectory detection (keep last 20 entries)
     MMAP_COUNT_NOW=$(wc -l < /proc/1/maps 2>/dev/null || echo "0")
-    echo "$(date +%s):${MMAP_COUNT_NOW}" >> /shared/validator_mmap_history
-    tail -20 /shared/validator_mmap_history > /shared/validator_mmap_history.tmp
-    mv /shared/validator_mmap_history.tmp /shared/validator_mmap_history
+    echo "$(date +%s):${MMAP_COUNT_NOW}" >> ${METRIC_PREFIX}_mmap_history
+    tail -20 ${METRIC_PREFIX}_mmap_history > ${METRIC_PREFIX}_mmap_history.tmp
+    mv ${METRIC_PREFIX}_mmap_history.tmp ${METRIC_PREFIX}_mmap_history
 
     # Append socket count history for socket growth trajectory detection (keep last 20 entries)
     SOCK_COUNT_NOW=$(wc -l < /proc/1/net/tcp 2>/dev/null || echo "1")
     SOCK_COUNT_NOW=$((SOCK_COUNT_NOW - 1))  # subtract header line
     [ "$SOCK_COUNT_NOW" -lt 0 ] && SOCK_COUNT_NOW=0
-    echo "$(date +%s):${SOCK_COUNT_NOW}" >> /shared/validator_sock_history
-    tail -20 /shared/validator_sock_history > /shared/validator_sock_history.tmp
-    mv /shared/validator_sock_history.tmp /shared/validator_sock_history
+    echo "$(date +%s):${SOCK_COUNT_NOW}" >> ${METRIC_PREFIX}_sock_history
+    tail -20 ${METRIC_PREFIX}_sock_history > ${METRIC_PREFIX}_sock_history.tmp
+    mv ${METRIC_PREFIX}_sock_history.tmp ${METRIC_PREFIX}_sock_history
 
     # Write DB structure check: 1 if critical dirs exist, 0 otherwise
     # TON validator-engine creates keyring/ (also pre-created by entrypoint) and
@@ -489,14 +619,14 @@ while true; do
     if [ -d /var/ton-work/db/keyring ] && [ -f /var/ton-work/db/config.json ] && \
        { [ -f /var/ton-work/db/CURRENT ] || ls /var/ton-work/db/MANIFEST-* >/dev/null 2>&1 || \
          find /var/ton-work/db -maxdepth 2 -name CURRENT -type f 2>/dev/null | head -1 | grep -q .; }; then
-        echo "1" > /shared/validator_db_structure
+        echo "1" > ${METRIC_PREFIX}_db_structure
     else
-        echo "0" > /shared/validator_db_structure
+        echo "0" > ${METRIC_PREFIX}_db_structure
     fi
 
     # Write keyring file count for cryptographic material integrity monitoring
     KEYRING_COUNT=$(ls /var/ton-work/db/keyring/ 2>/dev/null | wc -l)
-    echo "$KEYRING_COUNT" > /shared/validator_keyring_count
+    echo "$KEYRING_COUNT" > ${METRIC_PREFIX}_keyring_count
 
     # Check keyring file permissions — private keys should not be world-writable
     KEYRING_PERMS_OK=1
@@ -509,7 +639,7 @@ while true; do
             break
         fi
     done
-    echo "$KEYRING_PERMS_OK" > /shared/validator_keyring_perms
+    echo "$KEYRING_PERMS_OK" > ${METRIC_PREFIX}_keyring_perms
 
     # Check that critical DB files are readable+writable for permission integrity monitoring
     DB_PERM_OK=1
@@ -519,18 +649,18 @@ while true; do
             break
         fi
     done
-    echo "$DB_PERM_OK" > /shared/validator_db_perms
+    echo "$DB_PERM_OK" > ${METRIC_PREFIX}_db_perms
 
     # Refresh heartbeat before slow filesystem operations
-    date +%s > /shared/validator_heartbeat
+    date +%s > ${METRIC_PREFIX}_heartbeat
 
     # === LOW-PRIORITY METRICS (slow find/du/grep operations) ===
 
     # Write md5sum of /proc/1/cmdline for process identity monitoring (fast, moved earlier)
-    md5sum /proc/1/cmdline 2>/dev/null | awk '{print $1}' > /shared/validator_cmdline_hash
+    md5sum /proc/1/cmdline 2>/dev/null | awk '{print $1}' > ${METRIC_PREFIX}_cmdline_hash
 
     # Write database subdirectory count for directory structure monitoring (fast, moved earlier)
-    find /var/ton-work/db -maxdepth 2 -type d 2>/dev/null | wc -l > /shared/validator_db_dir_count
+    find /var/ton-work/db -maxdepth 2 -type d 2>/dev/null | wc -l > ${METRIC_PREFIX}_db_dir_count
 
     # Write RocksDB OPTIONS file count and non-empty status (moved earlier to avoid ghost assertions)
     OPTIONS_COUNT=$(find "${DB_ROOT}" -maxdepth 2 -name 'Options-*' -o -name 'OPTIONS-*' -type f 2>/dev/null | head -5 | wc -l)
@@ -539,11 +669,11 @@ while true; do
         FIRST_OPT=$(find "${DB_ROOT}" -maxdepth 2 -name 'Options-*' -o -name 'OPTIONS-*' -type f 2>/dev/null | head -1)
         [ -s "$FIRST_OPT" ] && OPTIONS_NONEMPTY=1
     fi
-    echo "${OPTIONS_COUNT}:${OPTIONS_NONEMPTY}" > /shared/validator_rocksdb_options
+    echo "${OPTIONS_COUNT}:${OPTIONS_NONEMPTY}" > ${METRIC_PREFIX}_rocksdb_options
 
     # Write RocksDB temporary file count (moved earlier to avoid ghost assertions)
     TMP_COUNT=$(find "${DB_ROOT}" -maxdepth 3 \( -name '*.tmp' -o -name '*.dbtmp' \) -type f 2>/dev/null | wc -l)
-    echo "$TMP_COUNT" > /shared/validator_rocksdb_tmp_files
+    echo "$TMP_COUNT" > ${METRIC_PREFIX}_rocksdb_tmp_files
 
     # Write RocksDB IDENTITY file content (moved earlier to avoid ghost assertions)
     # Use a fixed path (/var/ton-work/db/IDENTITY) to ensure we always read the
@@ -552,110 +682,110 @@ while true; do
     # iterations, making the identity appear to change and violating the stability
     # assertion. Fall back to find only if the root IDENTITY doesn't exist.
     if [ -f /var/ton-work/db/IDENTITY ] && [ -s /var/ton-work/db/IDENTITY ]; then
-        tr -d '[:space:]' < /var/ton-work/db/IDENTITY > /shared/validator_rocksdb_identity
+        tr -d '[:space:]' < /var/ton-work/db/IDENTITY > ${METRIC_PREFIX}_rocksdb_identity
     else
         IDENTITY_FILE=$(find /var/ton-work/db -maxdepth 2 -name IDENTITY -type f 2>/dev/null | sort | head -1)
         if [ -n "$IDENTITY_FILE" ] && [ -s "$IDENTITY_FILE" ]; then
-            tr -d '[:space:]' < "$IDENTITY_FILE" > /shared/validator_rocksdb_identity
+            tr -d '[:space:]' < "$IDENTITY_FILE" > ${METRIC_PREFIX}_rocksdb_identity
         else
-            touch /shared/validator_rocksdb_identity
+            touch ${METRIC_PREFIX}_rocksdb_identity
         fi
     fi
 
     # Refresh heartbeat after moved metrics
-    date +%s > /shared/validator_heartbeat
+    date +%s > ${METRIC_PREFIX}_heartbeat
 
     # Write DB directory size (bytes) for data-integrity monitoring
     if [ -d "/var/ton-work/db" ]; then
-        du -sb /var/ton-work/db 2>/dev/null | cut -f1 > /shared/validator_db_size
+        du -sb /var/ton-work/db 2>/dev/null | cut -f1 > ${METRIC_PREFIX}_db_size
     else
-        echo "0" > /shared/validator_db_size
+        echo "0" > ${METRIC_PREFIX}_db_size
     fi
     # Write RocksDB LOCK file existence for DB integrity monitoring
     LOCK_COUNT=$(find /var/ton-work/db -maxdepth 2 -name LOCK -type f 2>/dev/null | head -1 | wc -l)
     if [ "$LOCK_COUNT" -gt 0 ]; then
-        echo "1" > /shared/validator_db_lock
+        echo "1" > ${METRIC_PREFIX}_db_lock
     else
-        echo "0" > /shared/validator_db_lock
+        echo "0" > ${METRIC_PREFIX}_db_lock
     fi
     # Write config.json validity for data integrity monitoring
     if [ -f "/var/ton-work/db/config.json" ]; then
         if jq empty /var/ton-work/db/config.json 2>/dev/null; then
-            echo "1" > /shared/validator_config_valid
+            echo "1" > ${METRIC_PREFIX}_config_valid
         else
-            echo "0" > /shared/validator_config_valid
+            echo "0" > ${METRIC_PREFIX}_config_valid
         fi
     else
-        echo "-1" > /shared/validator_config_valid
+        echo "-1" > ${METRIC_PREFIX}_config_valid
     fi
     # Write config.json content hash for stability monitoring
-    md5sum /var/ton-work/db/config.json 2>/dev/null | awk '{print $1}' > /shared/validator_config_hash || echo "unavailable" > /shared/validator_config_hash
+    md5sum /var/ton-work/db/config.json 2>/dev/null | awk '{print $1}' > ${METRIC_PREFIX}_config_hash || echo "unavailable" > ${METRIC_PREFIX}_config_hash
     # Write config.json structural keys for structural integrity monitoring
     if [ -f "/var/ton-work/db/config.json" ]; then
-        jq -r 'keys | join(",")' /var/ton-work/db/config.json > /shared/validator_config_keys 2>/dev/null || echo "error" > /shared/validator_config_keys
+        jq -r 'keys | join(",")' /var/ton-work/db/config.json > ${METRIC_PREFIX}_config_keys 2>/dev/null || echo "error" > ${METRIC_PREFIX}_config_keys
     else
-        echo "missing" > /shared/validator_config_keys
+        echo "missing" > ${METRIC_PREFIX}_config_keys
     fi
     # Write TCP connection state counts (CLOSE_WAIT=08, TIME_WAIT=06 in hex)
     CLOSE_WAIT=$(awk '$4 == "08" {count++} END {print count+0}' /proc/1/net/tcp 2>/dev/null || echo "0")
     TIME_WAIT=$(awk '$4 == "06" {count++} END {print count+0}' /proc/1/net/tcp 2>/dev/null || echo "0")
-    echo "${CLOSE_WAIT},${TIME_WAIT}" > /shared/validator_tcp_states
+    echo "${CLOSE_WAIT},${TIME_WAIT}" > ${METRIC_PREFIX}_tcp_states
     # Write max accept queue depth across listening sockets
     # In /proc/1/net/tcp, state 0A = LISTEN; column 2 (local_address) field after ':' is the accept queue length in hex
     ACCEPT_Q_MAX=$(awk '$4 == "0A" {split($2, a, ":"); q=strtonum("0x"a[2]); if(q>m) m=q} END {print m+0}' /proc/1/net/tcp 2>/dev/null || echo "0")
-    echo "$ACCEPT_Q_MAX" > /shared/validator_accept_queue
+    echo "$ACCEPT_Q_MAX" > ${METRIC_PREFIX}_accept_queue
     # Write RocksDB WAL (.log) file count for compaction health monitoring
     WAL_COUNT=$(find /var/ton-work/db -maxdepth 2 -name "*.log" -type f 2>/dev/null | wc -l)
-    echo "$WAL_COUNT" > /shared/validator_wal_count
+    echo "$WAL_COUNT" > ${METRIC_PREFIX}_wal_count
 
     # Refresh heartbeat mid-way through slow operations
-    date +%s > /shared/validator_heartbeat
+    date +%s > ${METRIC_PREFIX}_heartbeat
 
     # Write total disk usage of /var/ton-work for disk budget monitoring
     DISK_USAGE=$(du -sb /var/ton-work 2>/dev/null | cut -f1 || echo "-1")
-    echo "$DISK_USAGE" > /shared/validator_disk_usage
+    echo "$DISK_USAGE" > ${METRIC_PREFIX}_disk_usage
     # Write RocksDB MANIFEST file count for data integrity monitoring
     MANIFEST_COUNT=$(find /var/ton-work/db -maxdepth 2 -name "MANIFEST-*" -type f 2>/dev/null | wc -l)
-    echo "$MANIFEST_COUNT" > /shared/validator_manifest_count
+    echo "$MANIFEST_COUNT" > ${METRIC_PREFIX}_manifest_count
     # Write RocksDB MANIFEST file size (bytes) for metadata growth monitoring
     MANIFEST_FILE=$(cat /var/ton-work/db/CURRENT 2>/dev/null | tr -d '[:space:]')
     if [ -n "$MANIFEST_FILE" ] && [ -f "/var/ton-work/db/$MANIFEST_FILE" ]; then
-        stat -c%s "/var/ton-work/db/$MANIFEST_FILE" > /shared/validator_manifest_size
+        stat -c%s "/var/ton-work/db/$MANIFEST_FILE" > ${METRIC_PREFIX}_manifest_size
     else
-        touch /shared/validator_manifest_size
+        touch ${METRIC_PREFIX}_manifest_size
     fi
     # Write RocksDB CURRENT file validity (root of metadata chain: CURRENT → MANIFEST → SST)
     CURRENT_FILE=$(find /var/ton-work/db -maxdepth 2 -name CURRENT -type f 2>/dev/null | head -1)
     if [ -n "$CURRENT_FILE" ] && [ -s "$CURRENT_FILE" ]; then
-        echo "1" > /shared/validator_current_valid
+        echo "1" > ${METRIC_PREFIX}_current_valid
     else
-        echo "0" > /shared/validator_current_valid
+        echo "0" > ${METRIC_PREFIX}_current_valid
     fi
     # Cross-validate CURRENT → MANIFEST reference
     if [ -n "$CURRENT_FILE" ] && [ -s "$CURRENT_FILE" ]; then
         CURRENT_DIR=$(dirname "$CURRENT_FILE")
         MANIFEST_REF=$(cat "$CURRENT_FILE" 2>/dev/null | tr -d '[:space:]')
         if [ -n "$MANIFEST_REF" ] && [ -f "${CURRENT_DIR}/${MANIFEST_REF}" ]; then
-            echo "1" > /shared/validator_current_manifest_consistent
+            echo "1" > ${METRIC_PREFIX}_current_manifest_consistent
         else
-            echo "0" > /shared/validator_current_manifest_consistent
+            echo "0" > ${METRIC_PREFIX}_current_manifest_consistent
         fi
     else
-        echo "-1" > /shared/validator_current_manifest_consistent
+        echo "-1" > ${METRIC_PREFIX}_current_manifest_consistent
     fi
     # Write ton-global.config JSON validity
     if [ -f "/var/ton-work/db/ton-global.config" ]; then
         if jq empty /var/ton-work/db/ton-global.config 2>/dev/null; then
-            echo "1" > /shared/validator_global_config_valid
+            echo "1" > ${METRIC_PREFIX}_global_config_valid
         else
-            echo "0" > /shared/validator_global_config_valid
+            echo "0" > ${METRIC_PREFIX}_global_config_valid
         fi
     else
-        echo "-1" > /shared/validator_global_config_valid
+        echo "-1" > ${METRIC_PREFIX}_global_config_valid
     fi
 
     # Refresh heartbeat before final batch
-    date +%s > /shared/validator_heartbeat
+    date +%s > ${METRIC_PREFIX}_heartbeat
 
     # Scan RocksDB LOG files for corruption/IO error indicators
     ROCKSDB_LOG=$(find /var/ton-work/db -maxdepth 2 -name "LOG" -type f 2>/dev/null | head -5)
@@ -665,7 +795,7 @@ while true; do
         COUNT=${COUNT:-0}
         CORRUPTION_COUNT=$((CORRUPTION_COUNT + COUNT))
     done
-    echo "$CORRUPTION_COUNT" > /shared/validator_rocksdb_errors
+    echo "$CORRUPTION_COUNT" > ${METRIC_PREFIX}_rocksdb_errors
     # Scan RocksDB LOG files for write stall indicators
     # Use specific patterns that match actual stall events, not stats dump headers
     # like "Write Stall Stats" which appear during normal periodic stats output.
@@ -675,17 +805,17 @@ while true; do
         COUNT=${COUNT:-0}
         WRITE_STALL_COUNT=$((WRITE_STALL_COUNT + COUNT))
     done
-    echo "$WRITE_STALL_COUNT" > /shared/validator_rocksdb_write_stalls
+    echo "$WRITE_STALL_COUNT" > ${METRIC_PREFIX}_rocksdb_write_stalls
     # Count non-fatal error lines in validator log for error rate monitoring
     # Exclude lines already caught by fatal/alloc checks to avoid double-counting
-    if [ -f /shared/validator.log ]; then
-        LOG_ERROR_COUNT=$(grep -ciE '\berror\b|\[E\s' /shared/validator.log 2>/dev/null || echo "0")
-        LOG_SIZE_KB=$(( $(stat -c %s /shared/validator.log 2>/dev/null || echo "0") / 1024 ))
+    if [ -f "${LOG_FILE}" ]; then
+        LOG_ERROR_COUNT=$(grep -ciE '\berror\b|\[E\s' "${LOG_FILE}" 2>/dev/null || echo "0")
+        LOG_SIZE_KB=$(( $(stat -c %s "${LOG_FILE}" 2>/dev/null || echo "0") / 1024 ))
     else
         LOG_ERROR_COUNT=0
         LOG_SIZE_KB=0
     fi
-    echo "${LOG_ERROR_COUNT}:${LOG_SIZE_KB}" > /shared/validator_log_error_count
+    echo "${LOG_ERROR_COUNT}:${LOG_SIZE_KB}" > ${METRIC_PREFIX}_log_error_count
     # Write RocksDB LOG file size (bytes) for LOG growth monitoring
     ROCKSDB_LOG_SIZE=0
     ROCKSDB_LOG_FILE="/var/ton-work/db/LOG"
@@ -695,7 +825,7 @@ while true; do
     if [ -n "$ROCKSDB_LOG_FILE" ] && [ -f "$ROCKSDB_LOG_FILE" ]; then
         ROCKSDB_LOG_SIZE=$(stat -c%s "$ROCKSDB_LOG_FILE" 2>/dev/null || echo "0")
     fi
-    echo "$ROCKSDB_LOG_SIZE" > /shared/validator_rocksdb_log_size
+    echo "$ROCKSDB_LOG_SIZE" > ${METRIC_PREFIX}_rocksdb_log_size
     # Write RocksDB compaction event count for compaction health monitoring
     COMPACTION_COUNT=0
     for logf in $ROCKSDB_LOG; do
@@ -703,12 +833,12 @@ while true; do
         COUNT=${COUNT:-0}
         COMPACTION_COUNT=$((COMPACTION_COUNT + COUNT))
     done
-    echo "$COMPACTION_COUNT" > /shared/validator_compaction_count
+    echo "$COMPACTION_COUNT" > ${METRIC_PREFIX}_compaction_count
     # Write RocksDB SST file count for data integrity monitoring
     # Search deeper (maxdepth 5) and include both .sst and .ldb extensions
     # TON uses multiple RocksDB instances in subdirs (celldb/, blockdb/, statedb/)
     SST_COUNT=$(find /var/ton-work/db -maxdepth 5 \( -name "*.sst" -o -name "*.ldb" \) -type f 2>/dev/null | wc -l)
-    echo "$SST_COUNT" > /shared/validator_sst_count
+    echo "$SST_COUNT" > ${METRIC_PREFIX}_sst_count
     # (rocksdb_options, rocksdb_tmp_files, cmdline_hash, rocksdb_identity, db_dir_count
     #  moved to early low-priority section to avoid ghost assertions under frequent restarts)
 
@@ -716,16 +846,16 @@ while true; do
     # aggressively and may not flush to disk for extended periods, making the log
     # appear stale to mtime-based freshness checks even while the process is healthy.
     # A no-op append (>>) preserves content while updating mtime.
-    if [ -f /shared/validator.log ]; then
-        touch /shared/validator.log
+    if [ -f "${LOG_FILE}" ]; then
+        touch "${LOG_FILE}"
     fi
 
     # Final heartbeat write at end of loop
-    date +%s > /shared/validator_heartbeat
+    date +%s > ${METRIC_PREFIX}_heartbeat
     # Write loop-completion epoch: signals that ALL metrics in this iteration
     # have been written. Used by the metric freshness driver as a more accurate
     # precondition than the heartbeat (which is refreshed 7 times mid-loop).
-    date +%s > /shared/validator_loop_epoch
+    date +%s > ${METRIC_PREFIX}_loop_epoch
     sleep 5
 done
 ) &
@@ -737,5 +867,5 @@ exec validator-engine \
     --ip "${IP}:${VALIDATOR_PORT}" \
     --threads "${THREADS}" \
     --verbosity "${VERBOSITY}" \
-    --logname /shared/validator.log \
-    2>>/shared/validator.log
+    --logname "${LOG_FILE}" \
+    2>>"${LOG_FILE}"

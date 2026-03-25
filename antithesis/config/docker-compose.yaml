@@ -9,6 +9,51 @@ services:
       target: validator
     image: ton-validator:latest
     environment:
+      - VALIDATOR_INDEX=1
+      - IS_GENESIS_COORDINATOR=true
+      - NUM_VALIDATORS=3
+      - VALIDATOR_PORT=30001
+      - CONSOLE_PORT=30002
+      - LITE_PORT=30003
+      - THREADS=2
+      - VERBOSITY=2
+    volumes:
+      - shared:/shared
+
+  validator2:
+    container_name: validator2
+    hostname: validator2
+    platform: linux/amd64
+    build:
+      context: ../..
+      dockerfile: antithesis/Dockerfile
+      target: validator
+    image: ton-validator:latest
+    environment:
+      - VALIDATOR_INDEX=2
+      - IS_GENESIS_COORDINATOR=false
+      - NUM_VALIDATORS=3
+      - VALIDATOR_PORT=30001
+      - CONSOLE_PORT=30002
+      - LITE_PORT=30003
+      - THREADS=2
+      - VERBOSITY=2
+    volumes:
+      - shared:/shared
+
+  validator3:
+    container_name: validator3
+    hostname: validator3
+    platform: linux/amd64
+    build:
+      context: ../..
+      dockerfile: antithesis/Dockerfile
+      target: validator
+    image: ton-validator:latest
+    environment:
+      - VALIDATOR_INDEX=3
+      - IS_GENESIS_COORDINATOR=false
+      - NUM_VALIDATORS=3
       - VALIDATOR_PORT=30001
       - CONSOLE_PORT=30002
       - LITE_PORT=30003
@@ -28,6 +73,8 @@ services:
     image: ton-workload:latest
     environment:
       - VALIDATOR_HOST=validator
+      - VALIDATOR2_HOST=validator2
+      - VALIDATOR3_HOST=validator3
       - VALIDATOR_PORT=30001
       - CONSOLE_PORT=30002
       - LITE_PORT=30003

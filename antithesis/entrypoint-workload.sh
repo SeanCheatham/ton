@@ -2,39 +2,44 @@
 set -euo pipefail
 
 # Entrypoint for the workload container.
-# Waits for the validator to be ready, then emits setup_complete and sleeps.
+# Waits for all validators to be ready, then emits setup_complete and sleeps.
 # Test Composer will run test commands from /opt/antithesis/test/v1/ton/.
 
 VALIDATOR_HOST="${VALIDATOR_HOST:-validator}"
+VALIDATOR2_HOST="${VALIDATOR2_HOST:-validator2}"
+VALIDATOR3_HOST="${VALIDATOR3_HOST:-validator3}"
 VALIDATOR_PORT="${VALIDATOR_PORT:-30001}"
 
 CONSOLE_PORT="${CONSOLE_PORT:-30002}"
 LITE_PORT="${LITE_PORT:-30003}"
 
 echo "Workload container starting..."
-echo "Waiting for validator to be reachable..."
 
-# Bounded wait — up to 20 seconds for the validator UDP port to come up
-for i in $(seq 1 10); do
-    if nc -z -w 1 -u "${VALIDATOR_HOST}" "${VALIDATOR_PORT}" 2>/dev/null; then
-        echo "Validator is reachable on UDP port ${VALIDATOR_PORT}"
-        break
-    fi
-    if [ "$i" -eq 10 ]; then
-        echo "Warning: validator UDP not reachable after 20s, continuing anyway"
-    fi
-    sleep 2
+# Wait for all validators' UDP ports to come up. Each validator runs on the
+# same internal port (30001) but a different container hostname.
+for VAL_HOST in "${VALIDATOR_HOST}" "${VALIDATOR2_HOST}" "${VALIDATOR3_HOST}"; do
+    echo "Waiting for ${VAL_HOST} to be reachable on UDP port ${VALIDATOR_PORT}..."
+    for i in $(seq 1 10); do
+        if nc -z -w 1 -u "${VAL_HOST}" "${VALIDATOR_PORT}" 2>/dev/null; then
+            echo "${VAL_HOST} is reachable on UDP port ${VALIDATOR_PORT}"
+            break
+        fi
+        if [ "$i" -eq 10 ]; then
+            echo "Warning: ${VAL_HOST} UDP not reachable after 20s, continuing anyway"
+        fi
+        sleep 2
+    done
 done
 
-# Wait for TCP subsystem ports (liteserver and console) to come up
-echo "Waiting for validator TCP subsystem ports..."
+# Wait for primary validator's TCP subsystem ports (liteserver and console).
+echo "Waiting for primary validator TCP subsystem ports..."
 for i in $(seq 1 10); do
     console_up=false
     lite_up=false
     nc -z -w 1 "${VALIDATOR_HOST}" "${CONSOLE_PORT}" 2>/dev/null && console_up=true
     nc -z -w 1 "${VALIDATOR_HOST}" "${LITE_PORT}" 2>/dev/null && lite_up=true
     if [[ "$console_up" == "true" && "$lite_up" == "true" ]]; then
-        echo "Console (${CONSOLE_PORT}) and liteserver (${LITE_PORT}) TCP ports are up"
+        echo "Console (${CONSOLE_PORT}) and liteserver (${LITE_PORT}) TCP ports are up on ${VALIDATOR_HOST}"
         break
     fi
     if [ "$i" -eq 10 ]; then
@@ -159,6 +164,10 @@ sdk_catalog_always "TCP retransmission rate is bounded when validator is healthy
 sdk_catalog_always "Validator has no IP-level input errors when healthy"
 sdk_catalog_always "Validator has no UDP buffer errors when healthy"
 sdk_catalog_always "Validator TCP reset rate is bounded when healthy"
+# Multi-validator consensus assertions
+sdk_catalog_always "Consensus quorum: at least 2 of 3 validators have fresh heartbeats"
+sdk_catalog_always "All 3 validators are reachable on their UDP ports"
+sdk_catalog_sometimes "Masterchain block height advances over time"
 echo "Assertion catalog emitted."
 
 # Signal that setup is complete
