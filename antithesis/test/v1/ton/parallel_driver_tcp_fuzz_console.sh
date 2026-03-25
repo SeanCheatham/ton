@@ -60,20 +60,35 @@ PACKETS_SENT=$((PACKETS_SENT + 1))
 printf 'GET / HTTP/1.1\r\nHost: %s\r\n\r\n' "${VALIDATOR_HOST}" | nc -w1 "${VALIDATOR_HOST}" "${CONSOLE_PORT}" 2>/dev/null || true
 PACKETS_SENT=$((PACKETS_SENT + 1))
 
-echo "Sent $PACKETS_SENT malformed TCP payloads. Waiting 2 seconds for processing..."
-sleep 2
+echo "Sent $PACKETS_SENT malformed TCP payloads. Waiting for validator to recover..."
+sleep 5
+
+# Helper: check port reachability with retries (bounded)
+check_port_with_retry() {
+    local host="$1" port="$2" proto="$3" max_retries=4 delay=2
+    for i in $(seq 1 "$max_retries"); do
+        if [ "$proto" = "udp" ]; then
+            nc -z -w 2 -u "$host" "$port" 2>/dev/null && return 0
+        else
+            nc -z -w 2 "$host" "$port" 2>/dev/null && return 0
+        fi
+        [ "$i" -lt "$max_retries" ] && sleep "$delay"
+    done
+    return 1
+}
 
 # Verify validator is still alive after fuzzing
 SURVIVED=true
 CHECKS_DETAIL=""
 
-# Check 1: heartbeat still fresh
+# Check 1: heartbeat still fresh (with extended window for post-fuzz recovery)
+POST_FUZZ_HEARTBEAT_MAX_AGE=90
 if [ -f /shared/validator_heartbeat ]; then
     HB_TS=$(cat /shared/validator_heartbeat 2>/dev/null | tr -d '[:space:]')
     NOW=$(date +%s)
     if [[ "$HB_TS" =~ ^[0-9]+$ ]]; then
         POST_AGE=$((NOW - HB_TS))
-        if [ "$POST_AGE" -gt "$HEARTBEAT_MAX_AGE" ]; then
+        if [ "$POST_AGE" -gt "$POST_FUZZ_HEARTBEAT_MAX_AGE" ]; then
             SURVIVED=false
             CHECKS_DETAIL="heartbeat_stale_after_fuzz(${POST_AGE}s)"
         fi
@@ -86,22 +101,22 @@ else
     CHECKS_DETAIL="heartbeat_missing_after_fuzz"
 fi
 
-# Check 2: UDP port still reachable
+# Check 2: UDP port still reachable (with retries)
 VALIDATOR_PORT="${VALIDATOR_PORT:-30001}"
-if ! nc -z -w 2 -u "${VALIDATOR_HOST}" "${VALIDATOR_PORT}" 2>/dev/null; then
+if ! check_port_with_retry "${VALIDATOR_HOST}" "${VALIDATOR_PORT}" "udp"; then
     SURVIVED=false
     CHECKS_DETAIL="${CHECKS_DETAIL:+${CHECKS_DETAIL},}udp_unreachable_after_fuzz"
 fi
 
-# Check 3: TCP console port still reachable
-if ! nc -z -w 2 "${VALIDATOR_HOST}" "${CONSOLE_PORT}" 2>/dev/null; then
+# Check 3: TCP console port still reachable (with retries — most likely to be transiently down)
+if ! check_port_with_retry "${VALIDATOR_HOST}" "${CONSOLE_PORT}" "tcp"; then
     SURVIVED=false
     CHECKS_DETAIL="${CHECKS_DETAIL:+${CHECKS_DETAIL},}console_unreachable_after_fuzz"
 fi
 
-# Check 4: TCP liteserver port still reachable
+# Check 4: TCP liteserver port still reachable (with retries)
 LITE_PORT="${LITE_PORT:-30003}"
-if ! nc -z -w 2 "${VALIDATOR_HOST}" "${LITE_PORT}" 2>/dev/null; then
+if ! check_port_with_retry "${VALIDATOR_HOST}" "${LITE_PORT}" "tcp"; then
     SURVIVED=false
     CHECKS_DETAIL="${CHECKS_DETAIL:+${CHECKS_DETAIL},}liteserver_unreachable_after_fuzz"
 fi

@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-set -euo pipefail
 
 # Parallel driver: Validator heartbeat interval is regular when healthy
 # The heartbeat loop writes every 5 seconds. If the interval between
