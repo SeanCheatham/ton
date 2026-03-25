@@ -180,6 +180,7 @@ echo "0" > /shared/validator_rocksdb_write_stalls
 echo "unknown" > /shared/validator_pid1_comm
 echo "unknown" > /shared/validator_nice
 echo "-1" > /shared/validator_syscall_count
+echo "-1:-1" > /shared/validator_tcp_conn_failures
 # Write a unique startup generation ID so drivers can detect container restarts
 # and reset their cross-invocation state (e.g., first-observed IDENTITY).
 date +%s%N > /shared/validator_startup_id
@@ -318,6 +319,10 @@ while true; do
     # Tcp row fields: $1=Tcp: $2...$12=OutSegs $13=RetransSegs (second Tcp: line has values)
     TCP_STATS=$(awk '/^Tcp:/{n++; if(n==2){print $12":"$13}}' /proc/1/net/snmp 2>/dev/null || echo "-1:-1")
     echo "$TCP_STATS" > /shared/validator_tcp_retrans
+    # Read TCP connection failure stats from /proc/1/net/snmp
+    # Tcp row fields on second line: $8=AttemptFails $9=EstabResets
+    TCP_CONN_FAILURES=$(awk '/^Tcp:/{n++; if(n==2){print $8":"$9}}' /proc/1/net/snmp 2>/dev/null || echo "-1:-1")
+    echo "$TCP_CONN_FAILURES" > /shared/validator_tcp_conn_failures
     # Read IP-level input errors from /proc/1/net/snmp
     # Ip row fields: $5=InHdrErrors $6=InAddrErrors (second Ip: line has values)
     IP_ERRORS=$(awk '/^Ip:/{n++; if(n==2){print $5+$6}}' /proc/1/net/snmp 2>/dev/null || echo "-1")

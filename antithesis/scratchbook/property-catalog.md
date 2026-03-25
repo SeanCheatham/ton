@@ -98,6 +98,18 @@
 | **Workload** | `parallel_driver_udp_buf_errors.sh` — reads `/shared/validator_udp_buf_errors` (RcvbufErrors:SndbufErrors from `/proc/1/net/snmp`) |
 | **Status** | ✅ Implemented |
 
+### Validator Has No TCP Connection Failures When Healthy
+
+| | |
+|---|---|
+| **Type** | Safety (Always) |
+| **Property** | When the validator is healthy, TCP AttemptFails and EstabResets counters from /proc/net/snmp are both zero |
+| **Invariant** | `ALWAYS(attempt_fails == 0 && estab_resets == 0, "Validator has no TCP connection failures when healthy")` |
+| **Antithesis Angle** | Fault injection may cause peer connections to fail or get forcefully reset, revealing connection lifecycle instability |
+| **Why It Matters** | Detects connection-level failures distinct from retransmissions — failed handshakes and forcefully reset established connections indicate peer communication breakdown |
+| **Workload** | `parallel_driver_tcp_conn_failures.sh` — reads `/shared/validator_tcp_conn_failures` written by validator heartbeat loop |
+| **Status** | ✅ Implemented |
+
 ## Future Properties (for antithesis-workload)
 
 ### 2. Validator Engine Does Not Crash
