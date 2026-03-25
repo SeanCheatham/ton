@@ -174,6 +174,7 @@ echo "0" > /shared/validator_manifest_size
 echo "0" > /shared/validator_compaction_count
 echo "0:0" > /shared/validator_thread_history
 echo "0:0" > /shared/validator_mmap_history
+echo "0:0" > /shared/validator_sock_history
 echo "-1" > /shared/validator_vmsize
 echo "0" > /shared/validator_rocksdb_log_size
 echo "0" > /shared/validator_rocksdb_write_stalls
@@ -385,6 +386,14 @@ while true; do
     echo "$(date +%s):${MMAP_COUNT_NOW}" >> /shared/validator_mmap_history
     tail -20 /shared/validator_mmap_history > /shared/validator_mmap_history.tmp
     mv /shared/validator_mmap_history.tmp /shared/validator_mmap_history
+
+    # Append socket count history for socket growth trajectory detection (keep last 20 entries)
+    SOCK_COUNT_NOW=$(wc -l < /proc/1/net/tcp 2>/dev/null || echo "1")
+    SOCK_COUNT_NOW=$((SOCK_COUNT_NOW - 1))  # subtract header line
+    [ "$SOCK_COUNT_NOW" -lt 0 ] && SOCK_COUNT_NOW=0
+    echo "$(date +%s):${SOCK_COUNT_NOW}" >> /shared/validator_sock_history
+    tail -20 /shared/validator_sock_history > /shared/validator_sock_history.tmp
+    mv /shared/validator_sock_history.tmp /shared/validator_sock_history
 
     # Write DB structure check: 1 if critical dirs exist, 0 otherwise
     # TON validator-engine creates keyring/ (also pre-created by entrypoint) and

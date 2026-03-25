@@ -50,6 +50,7 @@ if [[ ! -f "$PREV_FILE" ]]; then
     echo "$CURRENT_TS" > "$PREV_FILE"
     echo "$NOW" > "$PREV_WALLCLOCK_FILE"
     echo "First observation, saving baseline"
+    sdk_always true "$ASSERTION_NAME" '{"status":"first_observation","note":"saved_baseline"}'
     exit 0
 fi
 
@@ -58,6 +59,7 @@ if ! [[ "$PREV_TS" =~ ^[0-9]+$ ]]; then
     echo "$CURRENT_TS" > "$PREV_FILE"
     echo "$NOW" > "$PREV_WALLCLOCK_FILE"
     echo "Invalid previous timestamp, resetting"
+    sdk_always true "$ASSERTION_NAME" '{"status":"reset","note":"invalid_prev_timestamp"}'
     exit 0
 fi
 
@@ -73,6 +75,7 @@ if (( WALL_GAP > MAX_WALLCLOCK_GAP )); then
     echo "$CURRENT_TS" > "$PREV_FILE"
     echo "$NOW" > "$PREV_WALLCLOCK_FILE"
     echo "Wall-clock gap ${WALL_GAP}s > ${MAX_WALLCLOCK_GAP}s since last check, resetting baseline"
+    sdk_always true "$ASSERTION_NAME" '{"status":"reset","note":"wallclock_gap_too_large"}'
     exit 0
 fi
 
@@ -86,12 +89,14 @@ echo "$NOW" > "$PREV_WALLCLOCK_FILE"
 # If heartbeat hasn't changed, skip (we may be called faster than the 5s loop)
 if (( INTERVAL == 0 )); then
     echo "Heartbeat unchanged since last check, skipping"
+    sdk_always true "$ASSERTION_NAME" '{"status":"unchanged","note":"heartbeat_unchanged_since_last_check"}'
     exit 0
 fi
 
 # Negative interval shouldn't happen (monotonicity checked elsewhere), skip
 if (( INTERVAL < 0 )); then
     echo "Heartbeat went backwards, skipping (handled by monotonicity check)"
+    sdk_always true "$ASSERTION_NAME" '{"status":"skipped","note":"backwards_handled_by_monotonicity"}'
     exit 0
 fi
 
