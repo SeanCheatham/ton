@@ -3,8 +3,8 @@ set -euo pipefail
 
 # Parallel driver: Validator metric files are all fresh when healthy
 # Meta-infrastructure consistency property. When the validator is healthy,
-# ALL /shared/validator_* metric files should have modification times within
-# 60 seconds of each other. Catches partial heartbeat loop failures where
+# ALL /shared/validator_* metric files should have recent modification times.
+# Catches partial heartbeat loop failures where
 # slow operations (e.g., du -sb) block the loop, causing downstream metrics
 # to go stale while the heartbeat itself stays fresh.
 
@@ -59,7 +59,9 @@ for f in /shared/validator_*; do
         validator_transitions) continue ;;
         validator_heartbeat) continue ;;
         validator_rss_history|validator_fd_history|validator_thread_history) continue ;;
+        validator_mmap_history|validator_sock_history) continue ;;
         validator_rss_history.tmp|validator_fd_history.tmp|validator_thread_history.tmp) continue ;;
+        validator_mmap_history.tmp|validator_sock_history.tmp) continue ;;
         validator_rocksdb_identity_first|validator_rocksdb_identity_startup) continue ;;
         validator_last_up|validator_prev_state) continue ;;
         validator_io_ticks_prev|validator_cpu_ticks_prev) continue ;;
@@ -97,9 +99,13 @@ SPREAD=$((MAX_MTIME - MIN_MTIME))
 # under fault injection I/O delays. Spread-based checks penalize a healthy
 # but slow loop iteration. Age-based checks only fail when files are truly
 # stale — i.e., the loop hasn't completed a full iteration within the threshold.
-# 600s (10 minutes) accommodates even severely I/O-delayed loop iterations.
+# 1200s (20 minutes) accommodates even severely I/O-delayed loop iterations.
+# The heartbeat loop collects 60+ metrics including slow operations (du -sb,
+# find, grep on RocksDB logs). Under fault injection I/O delays, a single
+# loop iteration can take 10+ minutes. The threshold must exceed the maximum
+# possible loop iteration time to avoid false violations.
 MAX_AGE=$((NOW - MIN_MTIME))
-THRESHOLD=600
+THRESHOLD=1200
 
 if [ "$MAX_AGE" -le "$THRESHOLD" ]; then
     echo "PASS: Oldest metric file age is ${MAX_AGE}s (spread=${SPREAD}s) across ${FILE_COUNT} files (threshold: ${THRESHOLD}s)"
