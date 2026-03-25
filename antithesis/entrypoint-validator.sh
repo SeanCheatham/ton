@@ -546,6 +546,14 @@ while true; do
         CORRUPTION_COUNT=$((CORRUPTION_COUNT + COUNT))
     done
     echo "$CORRUPTION_COUNT" > /shared/validator_rocksdb_errors
+    # Scan RocksDB LOG files for write stall indicators
+    WRITE_STALL_COUNT=0
+    for logf in $ROCKSDB_LOG; do
+        COUNT=$(grep -ciE "Stalling writes|Stopping writes|Write stall" "$logf" 2>/dev/null) || true
+        COUNT=${COUNT:-0}
+        WRITE_STALL_COUNT=$((WRITE_STALL_COUNT + COUNT))
+    done
+    echo "$WRITE_STALL_COUNT" > /shared/validator_rocksdb_write_stalls
     # Write RocksDB LOG file size (bytes) for LOG growth monitoring
     ROCKSDB_LOG_SIZE=0
     ROCKSDB_LOG_FILE="/var/ton-work/db/LOG"

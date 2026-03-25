@@ -26,6 +26,42 @@
 | **Workload** | `parallel_driver_subsystem_consistency.sh` — runs repeatedly during fault injection |
 | **Status** | ✅ Implemented |
 
+### RocksDB LOG Contains No Write Stall Indicators When Validator Is Healthy
+
+| | |
+|---|---|
+| **Type** | Safety (Always) |
+| **Property** | When the validator is healthy (heartbeat fresh, all ports up), RocksDB LOG files contain no write stall patterns ("Stalling writes", "Stopping writes", "Write stall") |
+| **Invariant** | `ALWAYS(write_stall_count == 0, "RocksDB LOG contains no write stall indicators when validator is healthy")` |
+| **Antithesis Angle** | Fault injection may cause I/O delays that lead to compaction falling behind, triggering write stalls |
+| **Why It Matters** | Write stalls indicate compaction cannot keep up with writes, causing cascading performance degradation and potential data loss |
+| **Workload** | `parallel_driver_rocksdb_write_stalls.sh` — reads `/shared/validator_rocksdb_write_stalls` written by validator heartbeat loop |
+| **Status** | ✅ Implemented |
+
+### Validator Heartbeat Interval Is Regular When Healthy
+
+| | |
+|---|---|
+| **Type** | Safety (Always) |
+| **Property** | Consecutive heartbeat timestamps do not have gaps exceeding 30 seconds while the validator is healthy |
+| **Invariant** | `ALWAYS(interval <= 30, "Validator heartbeat interval is regular when healthy")` |
+| **Antithesis Angle** | Fault injection may cause CPU contention or I/O blocking that starves the heartbeat loop without killing the process |
+| **Why It Matters** | Detects heartbeat loop starvation — different from freshness checks (absolute age) — this checks cadence regularity |
+| **Workload** | `parallel_driver_heartbeat_regularity.sh` — tracks previous heartbeat timestamp in `/shared/validator_heartbeat_prev_check` |
+| **Status** | ✅ Implemented |
+
+### Validator Survives Empty UDP Packets
+
+| | |
+|---|---|
+| **Type** | Safety (Always) |
+| **Property** | The validator survives zero-length UDP datagrams sent to its ADNL port (30001) |
+| **Invariant** | `ALWAYS(survived, "Validator survives empty UDP packets")` |
+| **Antithesis Angle** | Zero-length packets can trigger off-by-one errors, null pointer dereferences, or division-by-zero in packet length calculations |
+| **Why It Matters** | Tests the ADNL parser's base case — all other UDP tests send non-empty data (random, oversized, ADNL-structured) |
+| **Workload** | `parallel_driver_empty_udp.sh` — sends 10 empty UDP datagrams then verifies all ports still reachable |
+| **Status** | ✅ Implemented |
+
 ## Future Properties (for antithesis-workload)
 
 ### 2. Validator Engine Does Not Crash

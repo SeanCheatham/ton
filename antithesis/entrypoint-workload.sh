@@ -147,6 +147,9 @@ sdk_catalog_always "Validator survives time-bomb TCP connections"
 sdk_catalog_always "Validator survives protocol confusion attacks on all ports"
 sdk_catalog_always "Validator listening socket accept queue is bounded"
 sdk_catalog_always "Validator syscall I/O counts are advancing when healthy"
+sdk_catalog_always "RocksDB LOG contains no write stall indicators when validator is healthy"
+sdk_catalog_always "Validator heartbeat interval is regular when healthy"
+sdk_catalog_always "Validator survives empty UDP packets"
 echo "Assertion catalog emitted."
 
 # Signal that setup is complete
