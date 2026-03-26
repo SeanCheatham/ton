@@ -67,7 +67,7 @@ get_seqno() {
         -c 'quit' 2>&1) || true
     # TON lite-client prints something like: "latest masterchain block is (-1,8000000000000000,42)"
     # Extract the seqno (third field in the tuple)
-    echo "${output}" | grep -oE '\(-1,[0-9a-fA-F]+,[0-9]+\)' | grep -oE ',[0-9]+\)$' | tr -d ',)' | tail -1
+    echo "${output}" | grep -oE '\(-1,[0-9a-fA-F]+,[0-9]+\)' | grep -oE ',[0-9]+\)$' | tr -d ',)' | tail -1 || true
 }
 
 echo "Querying initial block height..."
