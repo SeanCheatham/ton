@@ -16,7 +16,7 @@ CONSOLE_PORT="${CONSOLE_PORT:-30002}"
 LITE_PORT="${LITE_PORT:-30003}"
 THREADS="${THREADS:-2}"
 VERBOSITY="${VERBOSITY:-3}"
-IP="0.0.0.0"
+IP=$(hostname -i | awk '{print $1}')
 
 NUM_VALIDATORS="${NUM_VALIDATORS:-1}"
 IS_GENESIS_COORDINATOR="${IS_GENESIS_COORDINATOR:-true}"
@@ -262,10 +262,15 @@ if [ ! -f "${DB_ROOT}/config.json" ]; then
     if [ -n "${SAVED_PRIV_B64}" ] && [ -n "${SAVED_ID_B64}" ]; then
         VALIDATOR_LOCAL_IDS="[{\"@type\":\"id.config.local\",\"id\":{\"@type\":\"pk.ed25519\",\"key\":\"${SAVED_PRIV_B64}\"}}]"
         VALIDATOR_ENTRIES="[{\"@type\":\"validator.config.local\",\"id\":{\"@type\":\"adnl.id.short\",\"id\":\"${SAVED_ID_B64}\"}}]"
+        # Register the validator key as the DHT node identity so it matches
+        # the key used in the global config's static DHT bootstrap entries.
+        # Without this, DHT queries to the bootstrap key are undeliverable.
+        VALIDATOR_DHT="[{\"@type\":\"dht.config.local\",\"id\":{\"@type\":\"adnl.id.short\",\"id\":\"${SAVED_ID_B64}\"}}]"
         echo "Registering validator key for consensus participation (id=${SAVED_ID_B64:0:8}...)"
     else
         VALIDATOR_LOCAL_IDS="[]"
         VALIDATOR_ENTRIES="[]"
+        VALIDATOR_DHT="[]"
         echo "WARNING: Validator identity files not found, starting without validator keys"
     fi
 
@@ -273,7 +278,7 @@ if [ ! -f "${DB_ROOT}/config.json" ]; then
 {
     "@type": "config.local",
     "local_ids": ${VALIDATOR_LOCAL_IDS},
-    "dht": [],
+    "dht": ${VALIDATOR_DHT},
     "validators": ${VALIDATOR_ENTRIES},
     "liteservers": [
         {"@type": "liteserver.config.local", "id": ${LITE_PRIV}, "port": ${LITE_PORT}}
