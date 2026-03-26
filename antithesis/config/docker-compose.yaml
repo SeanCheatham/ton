@@ -7,7 +7,7 @@ services:
       context: ../..
       dockerfile: antithesis/Dockerfile
       target: validator
-    image: ton-validator:latest
+    image: seanton-validator:latest
     environment:
       - VALIDATOR_INDEX=1
       - IS_GENESIS_COORDINATOR=true
@@ -28,7 +28,7 @@ services:
       context: ../..
       dockerfile: antithesis/Dockerfile
       target: validator
-    image: ton-validator:latest
+    image: seanton-validator:latest
     environment:
       - VALIDATOR_INDEX=2
       - IS_GENESIS_COORDINATOR=false
@@ -49,7 +49,7 @@ services:
       context: ../..
       dockerfile: antithesis/Dockerfile
       target: validator
-    image: ton-validator:latest
+    image: seanton-validator:latest
     environment:
       - VALIDATOR_INDEX=3
       - IS_GENESIS_COORDINATOR=false
@@ -70,7 +70,7 @@ services:
       context: ../..
       dockerfile: antithesis/Dockerfile
       target: workload
-    image: ton-workload:latest
+    image: seanton-workload:latest
     environment:
       - VALIDATOR_HOST=validator
       - VALIDATOR2_HOST=validator2
