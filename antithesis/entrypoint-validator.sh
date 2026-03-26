@@ -93,6 +93,12 @@ if [ ! -f "${STATIC_DIR}/.zerostate_generated" ]; then
         } > "${DB_ROOT}/keyring/${VAL_ID_HEX}"
         chmod 600 "${DB_ROOT}/keyring/${VAL_ID_HEX}"
 
+        # Save validator identity for config registration during init.
+        # These files are read when building the local config so the engine
+        # registers this node as a validator (permanent + temp key).
+        echo "${VAL_PRIV_B64}" > "${DB_ROOT}/.validator_priv_b64"
+        echo "${VAL_ID_B64}" > "${DB_ROOT}/.validator_id_b64"
+
         # Publish public key for the coordinator to include in the zerostate.
         echo "${VAL_PUB_HEX}" > "${GENESIS_PUBKEYS_DIR}/${HOSTNAME}.hex"
 
@@ -235,15 +241,42 @@ if [ ! -f "${DB_ROOT}/config.json" ]; then
     CONTROL_PRIV=$(echo "$CONTROL_OUTPUT" | sed -n '1p')
     CONTROL_PUB_HASH=$(echo "$CONTROL_OUTPUT" | sed -n '3p' | jq -r '.id')
 
-    # Build local config with liteserver (random key) and control interface
+    # Generate a known liteserver key so we can export the public key for
+    # lite-client usage. Using liteserver.config.local (not random) lets us
+    # capture the public key before the init step.
+    echo "Generating liteserver key..."
+    LITE_OUTPUT=$(generate-random-id -m id)
+    LITE_PRIV=$(echo "$LITE_OUTPUT" | sed -n '1p')
+    LITE_PUB_B64=$(echo "$LITE_OUTPUT" | sed -n '2p' | jq -r '.key')
+    echo "${LITE_PUB_B64}" > "${DB_ROOT}/.liteserver_pub_b64"
+
+    # Load the validator identity saved during Phase A so the engine
+    # registers this node as a validator with permanent + temp keys.
+    SAVED_PRIV_B64=$(cat "${DB_ROOT}/.validator_priv_b64" 2>/dev/null || true)
+    SAVED_ID_B64=$(cat "${DB_ROOT}/.validator_id_b64" 2>/dev/null || true)
+
+    # Build local config with liteserver, control interface, and validator key.
+    # The validator entry in local_ids + validators causes load_local_config()
+    # to call config_add_validator_permanent_key and config_add_validator_temp_key,
+    # which is required for the engine to participate in consensus.
+    if [ -n "${SAVED_PRIV_B64}" ] && [ -n "${SAVED_ID_B64}" ]; then
+        VALIDATOR_LOCAL_IDS="[{\"@type\":\"id.config.local\",\"id\":{\"@type\":\"pk.ed25519\",\"key\":\"${SAVED_PRIV_B64}\"}}]"
+        VALIDATOR_ENTRIES="[{\"@type\":\"validator.config.local\",\"id\":{\"@type\":\"adnl.id.short\",\"id\":\"${SAVED_ID_B64}\"}}]"
+        echo "Registering validator key for consensus participation (id=${SAVED_ID_B64:0:8}...)"
+    else
+        VALIDATOR_LOCAL_IDS="[]"
+        VALIDATOR_ENTRIES="[]"
+        echo "WARNING: Validator identity files not found, starting without validator keys"
+    fi
+
     cat > /tmp/local-config.json <<LOCALEOF
 {
     "@type": "config.local",
-    "local_ids": [],
+    "local_ids": ${VALIDATOR_LOCAL_IDS},
     "dht": [],
-    "validators": [],
+    "validators": ${VALIDATOR_ENTRIES},
     "liteservers": [
-        {"@type": "liteserver.config.random.local", "port": ${LITE_PORT}}
+        {"@type": "liteserver.config.local", "id": ${LITE_PRIV}, "port": ${LITE_PORT}}
     ],
     "control": [
         {
@@ -270,10 +303,9 @@ LOCALEOF
 fi
 
 # Export liteserver config for lite-client usage by the workload container.
-# After initialization, config.json contains the liteserver section with the
-# auto-generated public key. Extract it and write a lite-client-compatible config.
+# The public key was saved during init; read it back for the lite-client config.
 if [ -f "${DB_ROOT}/config.json" ]; then
-    LITE_KEY=$(jq -r '.liteservers[0].id.key // empty' "${DB_ROOT}/config.json" 2>/dev/null || true)
+    LITE_KEY=$(cat "${DB_ROOT}/.liteserver_pub_b64" 2>/dev/null || true)
     if [ -n "$LITE_KEY" ]; then
         # lite-client expects a global-config-style JSON with liteserver descriptors.
         # IP is encoded as a signed 32-bit integer. For the Docker network, the workload

@@ -16,7 +16,7 @@ services:
       - CONSOLE_PORT=30002
       - LITE_PORT=30003
       - THREADS=2
-      - VERBOSITY=2
+      - VERBOSITY=3
     volumes:
       - shared:/shared
 
@@ -37,7 +37,7 @@ services:
       - CONSOLE_PORT=30002
       - LITE_PORT=30003
       - THREADS=2
-      - VERBOSITY=2
+      - VERBOSITY=3
     volumes:
       - shared:/shared
 
@@ -58,7 +58,7 @@ services:
       - CONSOLE_PORT=30002
       - LITE_PORT=30003
       - THREADS=2
-      - VERBOSITY=2
+      - VERBOSITY=3
     volumes:
       - shared:/shared
 
