@@ -23,6 +23,7 @@ RUN apt-get update && \
 RUN wget https://apt.llvm.org/llvm.sh && \
     chmod +x llvm.sh && \
     ./llvm.sh 21 all && \
+    ln -sf /usr/bin/ld.lld-21 /usr/bin/ld.lld && \
     rm -rf /var/lib/apt/lists/*
 
 ENV CC=/usr/bin/clang-21
@@ -43,7 +44,9 @@ RUN --mount=type=cache,target=/ton/build \
     --mount=type=cache,target=/ccache \
     cd /ton/build && \
     cmake -GNinja -DCMAKE_BUILD_TYPE=Release -DPORTABLE=1 -DTON_ARCH= -DTON_USE_JEMALLOC=ON \
-          -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache .. && \
+          -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+          -DCMAKE_C_FLAGS="-flto=thin" -DCMAKE_CXX_FLAGS="-flto=thin" \
+          -DCMAKE_EXE_LINKER_FLAGS="-flto=thin -fuse-ld=lld" .. && \
     ninja validator-engine generate-random-id lite-client func create-state gen_fif && \
     mkdir -p /build-out && \
     cp validator-engine/validator-engine utils/generate-random-id lite-client/lite-client \

@@ -18,6 +18,8 @@ HEARTBEAT_MAX_AGE=60
 HASH_FILE="/shared/validator_cmdline_hash"
 FIRST_FILE="/shared/validator_cmdline_first"
 HEARTBEAT_FILE="/shared/validator_heartbeat"
+STARTUP_ID_FILE="/shared/validator_startup_id"
+SAVED_STARTUP_FILE="/shared/validator_cmdline_startup_id"
 
 ASSERTION_NAME="Validator process command line is stable when healthy"
 
@@ -42,6 +44,20 @@ age=$((now - hb_ts))
 if [[ "$age" -gt "$HEARTBEAT_MAX_AGE" ]]; then
     echo "SKIP: heartbeat is stale (${age}s old)"
     exit 0
+fi
+
+# Detect validator restart: if the startup_id has changed, reset the baseline.
+# The validator's IP can change on restart, which changes the cmdline hash
+# (the --ip flag is part of the command line). This is expected behavior,
+# not a real instability.
+if [[ -f "$STARTUP_ID_FILE" ]]; then
+    current_startup_id=$(cat "$STARTUP_ID_FILE" 2>/dev/null | tr -d '[:space:]')
+    saved_startup_id=$(cat "$SAVED_STARTUP_FILE" 2>/dev/null | tr -d '[:space:]' || true)
+    if [[ -n "$current_startup_id" ]] && [[ "$current_startup_id" != "$saved_startup_id" ]]; then
+        echo "  Validator restarted (startup_id changed), resetting cmdline baseline"
+        echo "$current_startup_id" > "$SAVED_STARTUP_FILE"
+        rm -f "$FIRST_FILE"
+    fi
 fi
 
 # Step 3: Read current cmdline hash

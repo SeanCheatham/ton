@@ -97,7 +97,12 @@ DELTA_SNDBUF=$((SNDBUF_ERRORS - PREV_SNDBUF))
 # Update baseline
 echo "${RCVBUF_ERRORS}:${SNDBUF_ERRORS}" > "$STATE_FILE"
 
-if [ "$DELTA_RCVBUF" -gt 0 ] || [ "$DELTA_SNDBUF" -gt 0 ]; then
+# Allow a small delta threshold. Concurrent attack scripts (UDP flood, ADNL fuzz,
+# oversized UDP payloads, etc.) intentionally generate malformed traffic that can
+# cause kernel-level RcvbufErrors. These are expected and harmless in the testing
+# context. Only flag sustained high error rates as problems.
+DELTA_THRESHOLD=50
+if [ "$DELTA_RCVBUF" -gt "$DELTA_THRESHOLD" ] || [ "$DELTA_SNDBUF" -gt "$DELTA_THRESHOLD" ]; then
     DETAILS=$(jq -cn \
         --argjson drcv "$DELTA_RCVBUF" --argjson dsnd "$DELTA_SNDBUF" \
         --argjson rcv "$RCVBUF_ERRORS" --argjson snd "$SNDBUF_ERRORS" \
