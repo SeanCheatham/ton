@@ -234,7 +234,7 @@ if [ ! -f "${STATIC_DIR}/.zerostate_generated" ]; then
                     "${WALLET_DEST}" \
                     "${SEQNO}" \
                     0.01 \
-                    "${TX_DIR}/transfer_seqno_${SEQNO}" 2>&1 || true
+                    "${TX_DIR}/transfer_seqno_${SEQNO}" > /dev/null 2>&1 || true
             done
         )
         GENERATED=$(ls "${TX_DIR}"/transfer_seqno_*.boc 2>/dev/null | wc -l)
