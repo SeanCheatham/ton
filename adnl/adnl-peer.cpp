@@ -172,9 +172,8 @@ void AdnlPeerPairImpl::receive_packet_checked(AdnlPacket packet) {
   }
   if (packet.seqno() > 0) {
     ALWAYS(packet.seqno() > 0, "ADNL incoming seqno is positive", {{"seqno", static_cast<int>(packet.seqno())}});
-    ALWAYS(!received_packet(packet.seqno()), "ADNL no duplicate seqno received",
-           {{"seqno", static_cast<int>(packet.seqno())}});
     if (received_packet(packet.seqno())) {
+      REACHABLE("ADNL duplicate seqno received", {{"seqno", static_cast<int>(packet.seqno())}});
       VLOG(ADNL_INFO) << this << ": dropping IN message: old seqno: " << packet.seqno() << " (current max " << in_seqno_
                       << ")";
       return;

@@ -69,7 +69,7 @@ void CatChainReceiverImpl::deliver_block(CatChainReceivedBlock *block) {
   REACHABLE("Catchain block delivered to callback",
             {{"source_id", static_cast<int>(block->get_source_id())},
              {"height", static_cast<int>(block->get_height())}});
-  ALWAYS(block->get_height() > 0, "Catchain delivered block has positive height",
+  ALWAYS_OR_UNREACHABLE(block->get_height() > 0, "Catchain delivered block has positive height",
          {{"source_id", static_cast<int>(block->get_source_id())}});
   callback_->new_block(block->get_source_id(), block->get_fork_id(), block->get_hash(), block->get_height(),
                        block->get_height() == 1 ? CatChainBlockHash::zero() : block->get_prev_hash(),
@@ -85,7 +85,7 @@ void CatChainReceiverImpl::deliver_block(CatChainReceivedBlock *block) {
 
   auto update = create_tl_object<ton_api::catchain_blockUpdate>(block->export_tl());
   td::BufferSlice D = serialize_tl_object(update, true, block->get_payload().as_slice());
-  ALWAYS(D.size() <= opts_.max_serialized_block_size, "Catchain delivered block serialization within size limit",
+  ALWAYS_OR_UNREACHABLE(D.size() <= opts_.max_serialized_block_size, "Catchain delivered block serialization within size limit",
          {{"size", static_cast<int>(D.size())},
           {"limit", static_cast<int>(opts_.max_serialized_block_size)}});
   CHECK(D.size() <= opts_.max_serialized_block_size);
@@ -116,7 +116,7 @@ void CatChainReceiverImpl::receive_block(adnl::AdnlNodeIdShort src, tl_object_pt
 
   REACHABLE("Catchain block received from network",
             {{"src_id", static_cast<int>(src_id)}});
-  ALWAYS(src_id < get_sources_cnt(), "Catchain received block source ID is within bounds",
+  ALWAYS_OR_UNREACHABLE(src_id < get_sources_cnt(), "Catchain received block source ID is within bounds",
          {{"src_id", static_cast<int>(src_id)},
           {"sources_cnt", static_cast<int>(get_sources_cnt())}});
 
