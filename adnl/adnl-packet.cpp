@@ -87,19 +87,14 @@ td::Result<AdnlPacket> AdnlPacket::create(tl_object_ptr<ton_api::adnl_packetCont
 }
 
 td::Status AdnlPacket::run_basic_checks() const {
-  ALWAYS((flags_ & ~Flags::f_all) == 0, "ADNL packet flags are valid subset", {{"flags", static_cast<int>(flags_)}});
   if ((flags_ & Flags::f_all) != flags_) {
     return td::Status::Error(ErrorCode::protoviolation, "bad flags");
   }
-  ALWAYS(!((flags_ & Flags::f_one_message) && (flags_ & Flags::f_mult_messages)),
-         "ADNL packet has at most one message flag type", {{"flags", static_cast<int>(flags_)}});
   if ((flags_ & Flags::f_one_message) && (flags_ & Flags::f_mult_messages)) {
     return td::Status::Error(ErrorCode::protoviolation, "both flags 0x4 and 0x8 set");
   }
   if ((flags_ & Flags::f_from) && (flags_ & Flags::f_from_short)) {
-    bool source_match = (from_.compute_short_id() == from_short_);
-    ALWAYS(source_match, "ADNL packet source IDs are consistent", {{"flags", static_cast<int>(flags_)}});
-    if (!source_match) {
+    if (from_.compute_short_id() != from_short_) {
       return td::Status::Error(ErrorCode::protoviolation, "source and short source mismatch");
     }
   }

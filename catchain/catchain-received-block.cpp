@@ -161,11 +161,6 @@ void CatChainReceivedBlockImpl::pre_deliver(ton_api::catchain_block_data_fork &b
   REACHABLE("Catchain fork proof detected",
             {{"source_id", static_cast<int>(source_id_)},
              {"height", static_cast<int>(height_)}});
-  ALWAYS_OR_UNREACHABLE(b.left_->height_ == b.right_->height_, "Catchain fork proof blocks have same height",
-         {{"height", static_cast<int>(b.left_->height_)}});
-  ALWAYS_OR_UNREACHABLE(b.left_->src_ == b.right_->src_, "Catchain fork proof blocks have same source",
-         {{"src", static_cast<int>(b.left_->src_)}});
-  ALWAYS_OR_UNREACHABLE(b.left_->data_hash_ != b.right_->data_hash_, "Catchain fork proof blocks have different data hashes", {});
 
   CatChainReceiverSource *S = chain_->get_source(b.left_->src_);
   S->on_found_fork_proof(

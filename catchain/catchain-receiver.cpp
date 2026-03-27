@@ -116,9 +116,6 @@ void CatChainReceiverImpl::receive_block(adnl::AdnlNodeIdShort src, tl_object_pt
 
   REACHABLE("Catchain block received from network",
             {{"src_id", static_cast<int>(src_id)}});
-  ALWAYS_OR_UNREACHABLE(src_id < get_sources_cnt(), "Catchain received block source ID is within bounds",
-         {{"src_id", static_cast<int>(src_id)},
-          {"sources_cnt", static_cast<int>(get_sources_cnt())}});
 
   td::uint64 max_block_height = get_max_block_height(opts_, sources_.size());
   if ((td::uint32)block->height_ > max_block_height) {

@@ -467,7 +467,6 @@ bool ValidateQuery::unpack_block_candidate() {
   vm::BagOfCells boc1;
   // 1. deserialize block itself
   FileHash fhash = block::compute_file_hash(block_candidate.data);
-  ALWAYS(fhash == id_.file_hash, "Block candidate file hash matches declared hash", {{"block_id", id_.to_str()}});
   if (fhash != id_.file_hash) {
     return reject_query(PSTRING() << "block candidate has invalid file hash: declared " << id_.file_hash.to_hex()
                                   << ", actual " << fhash.to_hex());
@@ -483,7 +482,6 @@ bool ValidateQuery::unpack_block_candidate() {
   REJECT_UNLESS(block_root_.not_null());
   // 2. check that root_hash equals the announced one
   RootHash rhash{block_root_->get_hash().bits()};
-  ALWAYS(rhash == id_.root_hash, "Block candidate root hash matches declared hash", {{"block_id", id_.to_str()}});
   if (rhash != id_.root_hash) {
     return reject_query(PSTRING() << "block candidate has invalid root hash: declared " << id_.root_hash.to_hex()
                                   << ", actual " << rhash.to_hex());
@@ -1412,7 +1410,6 @@ bool ValidateQuery::compute_prev_state() {
     }
   }
   Bits256 state_hash{prev_state_root_->get_hash().bits()};
-  ALWAYS(state_hash == prev_state_hash_, "Previous state hash matches block header declaration", {{"block_id", id_.to_str()}});
   if (state_hash != prev_state_hash_) {
     return reject_query("previous state hash mismatch for block "s + id_.to_str() + " : block header declares " +
                         prev_state_hash_.to_hex() + " , actual " + state_hash.to_hex());
@@ -1426,7 +1423,6 @@ bool ValidateQuery::compute_prev_state() {
 bool ValidateQuery::compute_next_state() {
   LOG(DEBUG) << "computing next state";
   auto res = vm::MerkleUpdate::validate(state_update_);
-  ALWAYS(res.is_ok(), "Block state Merkle update is valid", {{"block_id", id_.to_str()}});
   if (res.is_error()) {
     return reject_query("state update is invalid: "s + res.move_as_error().to_string());
   }
@@ -1440,7 +1436,6 @@ bool ValidateQuery::compute_next_state() {
   }
   state_root_ = r_state_root.move_as_ok();
   Bits256 state_hash{state_root_->get_hash().bits()};
-  ALWAYS(state_hash == state_hash_, "Computed next state hash matches block header declaration", {{"block_id", id_.to_str()}});
   if (state_hash != state_hash_) {
     return reject_query("next state hash mismatch for block "s + id_.to_str() + " : block header declares " +
                         state_hash_.to_hex() + " , actual " + state_hash.to_hex());
@@ -1453,7 +1448,6 @@ bool ValidateQuery::compute_next_state() {
     return reject_query(PSTRING() << "new state contains generation lt " << info.gen_lt << " distinct from end_lt "
                                   << end_lt_ << " in block header");
   }
-  ALWAYS(now_ == info.gen_utime, "New state generation time matches block header", {{"block_id", id_.to_str()}});
   if (now_ != info.gen_utime) {
     return reject_query(PSTRING() << "new state contains generation time " << info.gen_utime
                                   << " distinct from the value " << now_ << " in block header");
