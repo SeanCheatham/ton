@@ -66,8 +66,22 @@ if [ ! -f "${STATIC_DIR}/.zerostate_generated" ]; then
 
     # ------------------------------------------------------------------
     # Phase A: Generate own keypair and publish pubkey + DHT entry.
-    # Idempotent: skipped on container restart if already published.
+    # Idempotent: skipped on container restart if already published AND
+    # identity can be restored from the shared volume.
     # ------------------------------------------------------------------
+    # If the pubkey exists on shared volume but identity backup doesn't,
+    # this is a stale artifact from a previous run. Remove it to force
+    # a clean Phase A re-run that will persist identity properly.
+    GENESIS_IDENTITY_DIR="${GENESIS_DIR}/identity/${HOSTNAME}"
+    if [ -f "${GENESIS_PUBKEYS_DIR}/${HOSTNAME}.hex" ] && [ ! -d "${GENESIS_IDENTITY_DIR}" ]; then
+        echo "Phase A: Stale pubkey without identity backup detected, forcing re-generation..."
+        rm -f "${GENESIS_PUBKEYS_DIR}/${HOSTNAME}.hex"
+        rm -f "${GENESIS_DHT_DIR}/${HOSTNAME}.json"
+        # Also remove the genesis sentinel so the coordinator re-generates
+        # the zerostate with the new key.
+        rm -f "${GENESIS_SENTINEL}"
+    fi
+
     if [ ! -f "${GENESIS_PUBKEYS_DIR}/${HOSTNAME}.hex" ]; then
         echo "Phase A: Generating validator key (index=${VALIDATOR_INDEX})..."
 
@@ -99,6 +113,16 @@ if [ ! -f "${STATIC_DIR}/.zerostate_generated" ]; then
         echo "${VAL_PRIV_B64}" > "${DB_ROOT}/.validator_priv_b64"
         echo "${VAL_ID_B64}" > "${DB_ROOT}/.validator_id_b64"
 
+        # Persist identity to shared volume so it survives container restarts.
+        # The local DB dir is ephemeral (no volume mount), but /shared/ persists.
+        # When Phase A is skipped on restart, we restore from these files.
+        GENESIS_IDENTITY_DIR="${GENESIS_DIR}/identity/${HOSTNAME}"
+        mkdir -p "${GENESIS_IDENTITY_DIR}"
+        echo "${VAL_PRIV_B64}" > "${GENESIS_IDENTITY_DIR}/priv_b64"
+        echo "${VAL_ID_B64}"   > "${GENESIS_IDENTITY_DIR}/id_b64"
+        echo "${VAL_ID_HEX}"   > "${GENESIS_IDENTITY_DIR}/id_hex"
+        cp "${DB_ROOT}/keyring/${VAL_ID_HEX}" "${GENESIS_IDENTITY_DIR}/keyring_file"
+
         # Publish public key for the coordinator to include in the zerostate.
         echo "${VAL_PUB_HEX}" > "${GENESIS_PUBKEYS_DIR}/${HOSTNAME}.hex"
 
@@ -126,6 +150,23 @@ if [ ! -f "${STATIC_DIR}/.zerostate_generated" ]; then
         echo "Phase A complete: pubkey and DHT entry published for ${HOSTNAME} (IP: ${MY_IP})"
     else
         echo "Phase A: keypair already published for ${HOSTNAME}, skipping."
+
+        # Restore identity from shared volume if local ephemeral storage was lost.
+        # This happens when Antithesis kills and restarts the container: the shared
+        # volume retains the pubkey file (so Phase A is skipped) but the local
+        # DB_ROOT is wiped, losing .validator_priv_b64, .validator_id_b64, and
+        # the keyring file. Without restoration the validator starts without keys
+        # and cannot participate in consensus.
+        GENESIS_IDENTITY_DIR="${GENESIS_DIR}/identity/${HOSTNAME}"
+        if [ -d "${GENESIS_IDENTITY_DIR}" ] && [ ! -f "${DB_ROOT}/.validator_priv_b64" ]; then
+            echo "Restoring validator identity from shared volume..."
+            cp "${GENESIS_IDENTITY_DIR}/priv_b64" "${DB_ROOT}/.validator_priv_b64"
+            cp "${GENESIS_IDENTITY_DIR}/id_b64"   "${DB_ROOT}/.validator_id_b64"
+            RESTORED_ID_HEX=$(cat "${GENESIS_IDENTITY_DIR}/id_hex")
+            cp "${GENESIS_IDENTITY_DIR}/keyring_file" "${DB_ROOT}/keyring/${RESTORED_ID_HEX}"
+            chmod 600 "${DB_ROOT}/keyring/${RESTORED_ID_HEX}"
+            echo "Validator identity restored (id_hex=${RESTORED_ID_HEX:0:8}...)"
+        fi
     fi
 
     # ------------------------------------------------------------------

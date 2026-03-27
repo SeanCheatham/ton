@@ -50,19 +50,21 @@ if ! jq empty "$CONFIG" 2>/dev/null; then
     exit 0
 fi
 
-# Check that the config contains expected liteserver structure
+# Check that the liteserver config contains expected structure.
+# Note: the liteserver config is a lite-client config stub with only
+# "@type" and "liteservers" — it does NOT have a "validator" key.
 HAS_LITESERVERS=$(jq 'has("liteservers")' "$CONFIG" 2>/dev/null || echo "false")
-HAS_VALIDATOR=$(jq 'has("validator")' "$CONFIG" 2>/dev/null || echo "false")
 
-# Also verify the global config is intact
-GLOBAL_CONFIG="/var/ton-work/db/ton-global.config"
+# Also verify the global config is intact (check shared volume copy since
+# /var/ton-work/db/ is ephemeral and not accessible from the workload).
+GLOBAL_CONFIG="/shared/genesis/ton-global.config"
 GLOBAL_VALID="false"
+HAS_VALIDATOR="false"
 if [ -f "$GLOBAL_CONFIG" ]; then
     if jq empty "$GLOBAL_CONFIG" 2>/dev/null; then
         GLOBAL_VALID="true"
+        HAS_VALIDATOR=$(jq 'has("validator")' "$GLOBAL_CONFIG" 2>/dev/null || echo "false")
     fi
-elif [ -f "/shared/ton-global.config" ]; then
-    GLOBAL_VALID="true"
 fi
 
 PASS=true
@@ -75,7 +77,7 @@ fi
 
 if [ "$HAS_VALIDATOR" != "true" ]; then
     PASS=false
-    ISSUES="${ISSUES:+${ISSUES},}missing_validator_key"
+    ISSUES="${ISSUES:+${ISSUES},}missing_validator_key_in_global"
 fi
 
 DETAILS=$(jq -cn \
@@ -83,7 +85,7 @@ DETAILS=$(jq -cn \
     --argjson has_validator "$HAS_VALIDATOR" \
     --argjson global_valid "$GLOBAL_VALID" \
     --arg issues "${ISSUES:-none}" \
-    '{has_liteservers: $has_liteservers, has_validator: $has_validator, global_config_valid: $global_valid, issues: $issues}')
+    '{has_liteservers: $has_liteservers, has_validator_in_global: $has_validator, global_config_valid: $global_valid, issues: $issues}')
 
 if [ "$PASS" = "true" ]; then
     echo "PASS: Validator environment configuration is stable"
