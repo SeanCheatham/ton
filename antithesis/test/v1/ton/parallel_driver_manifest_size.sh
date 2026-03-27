@@ -9,7 +9,7 @@ set -euo pipefail
 
 source "$(dirname "$0")/helper_sdk.sh"
 
-VALIDATOR_HOST="${VALIDATOR_HOST:-validator}"
+VALIDATOR_HOST="${VALIDATOR_HOST:-ton-validator}"
 HEARTBEAT_MAX_AGE=60
 ASSERTION_NAME="RocksDB MANIFEST file size is bounded when validator is healthy"
 BOUND=52428800  # 50MB in bytes

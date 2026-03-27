@@ -13,6 +13,11 @@ source "${SCRIPT_DIR}/helper_sdk.sh"
 
 ASSERTION_NAME="Validator disk I/O bytes are progressing when healthy"
 STATE_FILE="/shared/_prev_io_bytes"
+STALL_COUNT_FILE="/shared/_io_stall_count"
+# Require 3 consecutive stalled observations before failing.
+# During fault injection, Antithesis may pause the validator process or inject
+# I/O faults, causing transient stalls that aren't real bugs.
+MAX_CONSECUTIVE_STALLS=3
 
 echo "Checking validator disk I/O progress..."
 
@@ -85,15 +90,27 @@ fi
 
 if [ "$CURRENT" -gt "$PREV" ]; then
     DELTA=$((CURRENT - PREV))
+    # Reset stall counter on progress
+    echo "0" > "$STALL_COUNT_FILE"
     DETAILS=$(jq -cn --argjson cur "$CURRENT" --argjson prev "$PREV" --argjson delta "$DELTA" \
         '{current_bytes: $cur, prev_bytes: $prev, delta_bytes: $delta}')
     echo "PASS: I/O bytes progressing (delta: ${DELTA})"
     sdk_always true "${ASSERTION_NAME}" "$DETAILS"
 elif [ "$CURRENT" -eq "$PREV" ]; then
+    # Track consecutive stalls — only fail after MAX_CONSECUTIVE_STALLS
+    STALL_COUNT=$(cat "$STALL_COUNT_FILE" 2>/dev/null || echo "0")
+    STALL_COUNT=$(( ${STALL_COUNT:-0} + 1 ))
+    echo "$STALL_COUNT" > "$STALL_COUNT_FILE"
     DETAILS=$(jq -cn --argjson cur "$CURRENT" --argjson prev "$PREV" \
-        '{current_bytes: $cur, prev_bytes: $prev, delta_bytes: 0, status: "stalled"}')
-    echo "FAIL: I/O bytes stalled at ${CURRENT}"
-    sdk_always false "${ASSERTION_NAME}" "$DETAILS"
+        --argjson stalls "$STALL_COUNT" --argjson max "$MAX_CONSECUTIVE_STALLS" \
+        '{current_bytes: $cur, prev_bytes: $prev, delta_bytes: 0, consecutive_stalls: $stalls, max_stalls: $max}')
+    if [ "$STALL_COUNT" -ge "$MAX_CONSECUTIVE_STALLS" ]; then
+        echo "FAIL: I/O bytes stalled at ${CURRENT} for ${STALL_COUNT} consecutive checks"
+        sdk_always false "${ASSERTION_NAME}" "$DETAILS"
+    else
+        echo "WARN: I/O bytes stalled at ${CURRENT} (${STALL_COUNT}/${MAX_CONSECUTIVE_STALLS}), tolerating"
+        sdk_always true "${ASSERTION_NAME}" "$DETAILS"
+    fi
 else
     # CURRENT < PREV indicates process restart (counters reset) or file-read race.
     # Reset baseline rather than failing.

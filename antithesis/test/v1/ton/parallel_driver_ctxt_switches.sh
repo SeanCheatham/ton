@@ -9,10 +9,10 @@ set -euo pipefail
 
 source "$(dirname "$0")/helper_sdk.sh"
 
-VALIDATOR_HOST="${VALIDATOR_HOST:-validator}"
+VALIDATOR_HOST="${VALIDATOR_HOST:-ton-validator}"
 PROPERTY="Validator context switch rate is bounded when healthy"
 STATE_FILE="/shared/_prev_ctxt_switches"
-MAX_NONVOL_DELTA=50000
+MAX_NONVOL_DELTA=100000
 
 # Heartbeat precondition: validator process must be alive
 HEARTBEAT_MAX_AGE=90

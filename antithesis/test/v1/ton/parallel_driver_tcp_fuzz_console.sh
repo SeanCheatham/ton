@@ -8,7 +8,7 @@
 
 source "$(dirname "$0")/helper_sdk.sh"
 
-VALIDATOR_HOST="${VALIDATOR_HOST:-validator}"
+VALIDATOR_HOST="${VALIDATOR_HOST:-ton-validator}"
 CONSOLE_PORT="${CONSOLE_PORT:-30002}"
 ASSERTION_NAME="Validator survives malformed TCP traffic on console port"
 HEARTBEAT_MAX_AGE=60

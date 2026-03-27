@@ -7,7 +7,7 @@
 
 source "$(dirname "$0")/helper_sdk.sh"
 
-VALIDATOR_HOST="${VALIDATOR_HOST:-validator}"
+VALIDATOR_HOST="${VALIDATOR_HOST:-ton-validator}"
 VALIDATOR_PORT="${VALIDATOR_PORT:-30001}"
 ASSERTION_NAME="Validator survives malformed ADNL protocol traffic"
 HEARTBEAT_MAX_AGE=60

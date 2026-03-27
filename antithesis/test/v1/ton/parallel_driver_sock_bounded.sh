@@ -9,7 +9,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/helper_sdk.sh"
 
-VALIDATOR_HOST="${VALIDATOR_HOST:-validator}"
+VALIDATOR_HOST="${VALIDATOR_HOST:-ton-validator}"
 UDP_PORT="${VALIDATOR_PORT:-30001}"
 CONSOLE_PORT="${CONSOLE_PORT:-30002}"
 LITE_PORT="${LITE_PORT:-30003}"

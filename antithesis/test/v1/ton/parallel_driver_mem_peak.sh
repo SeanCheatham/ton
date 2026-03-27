@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 source /opt/antithesis/test/v1/ton/helper_sdk.sh
-VALIDATOR_HOST="${VALIDATOR_HOST:-validator}"
+VALIDATOR_HOST="${VALIDATOR_HOST:-ton-validator}"
 PROPERTY="Validator peak memory (VmPeak) is bounded"
 PEAK_LIMIT=4194304  # 4GB in KB
 

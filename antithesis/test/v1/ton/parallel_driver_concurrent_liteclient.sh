@@ -6,7 +6,7 @@
 
 source "$(dirname "$0")/helper_sdk.sh"
 
-VALIDATOR_HOST="${VALIDATOR_HOST:-validator}"
+VALIDATOR_HOST="${VALIDATOR_HOST:-ton-validator}"
 LITE_PORT="${LITE_PORT:-30003}"
 ASSERTION_NAME="Validator survives concurrent lite-client queries"
 HEARTBEAT_MAX_AGE=60

@@ -8,7 +8,7 @@ set -euo pipefail
 
 source "$(dirname "$0")/helper_sdk.sh"
 
-VALIDATOR_HOST="${VALIDATOR_HOST:-validator}"
+VALIDATOR_HOST="${VALIDATOR_HOST:-ton-validator}"
 VALIDATOR_PORT="${VALIDATOR_PORT:-30001}"
 
 LOG_FILE="/shared/validator.log"

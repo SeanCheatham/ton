@@ -12,6 +12,11 @@ source "${SCRIPT_DIR}/helper_sdk.sh"
 
 ASSERTION_NAME="Validator syscall I/O counts are advancing when healthy"
 STATE_FILE="/shared/_prev_syscall_count"
+STALL_COUNT_FILE="/shared/_syscall_stall_count"
+# Require 3 consecutive stalled observations before failing.
+# During fault injection, Antithesis may pause the validator process,
+# causing transient stalls that aren't real bugs.
+MAX_CONSECUTIVE_STALLS=3
 
 echo "Checking validator syscall I/O count progress..."
 
@@ -84,15 +89,27 @@ fi
 
 if [ "$CURRENT" -gt "$PREV" ]; then
     DELTA=$((CURRENT - PREV))
+    # Reset stall counter on progress
+    echo "0" > "$STALL_COUNT_FILE"
     DETAILS=$(jq -cn --argjson cur "$CURRENT" --argjson prev "$PREV" --argjson delta "$DELTA" \
         '{current_count: $cur, prev_count: $prev, delta: $delta}')
     echo "PASS: Syscall count progressing (delta: ${DELTA})"
     sdk_always true "${ASSERTION_NAME}" "$DETAILS"
 elif [ "$CURRENT" -eq "$PREV" ]; then
+    # Track consecutive stalls — only fail after MAX_CONSECUTIVE_STALLS
+    STALL_COUNT=$(cat "$STALL_COUNT_FILE" 2>/dev/null || echo "0")
+    STALL_COUNT=$(( ${STALL_COUNT:-0} + 1 ))
+    echo "$STALL_COUNT" > "$STALL_COUNT_FILE"
     DETAILS=$(jq -cn --argjson cur "$CURRENT" --argjson prev "$PREV" \
-        '{current_count: $cur, prev_count: $prev, delta: 0, status: "stalled"}')
-    echo "FAIL: Syscall count stalled at ${CURRENT}"
-    sdk_always false "${ASSERTION_NAME}" "$DETAILS"
+        --argjson stalls "$STALL_COUNT" --argjson max "$MAX_CONSECUTIVE_STALLS" \
+        '{current_count: $cur, prev_count: $prev, delta: 0, consecutive_stalls: $stalls, max_stalls: $max}')
+    if [ "$STALL_COUNT" -ge "$MAX_CONSECUTIVE_STALLS" ]; then
+        echo "FAIL: Syscall count stalled at ${CURRENT} for ${STALL_COUNT} consecutive checks"
+        sdk_always false "${ASSERTION_NAME}" "$DETAILS"
+    else
+        echo "WARN: Syscall count stalled at ${CURRENT} (${STALL_COUNT}/${MAX_CONSECUTIVE_STALLS}), tolerating"
+        sdk_always true "${ASSERTION_NAME}" "$DETAILS"
+    fi
 else
     # CURRENT < PREV indicates process restart (counters reset) or file-read race.
     echo "Syscall count decreased (prev=${PREV}, cur=${CURRENT}) — likely process restart, resetting baseline"

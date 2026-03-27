@@ -9,7 +9,7 @@ set -euo pipefail
 source "$(dirname "$0")/helper_sdk.sh"
 
 ASSERTION_NAME="Validator survives empty UDP packets"
-VALIDATOR_HOST="${VALIDATOR_HOST:-validator}"
+VALIDATOR_HOST="${VALIDATOR_HOST:-ton-validator}"
 VALIDATOR_PORT="${VALIDATOR_PORT:-30001}"
 
 # Precondition: heartbeat fresh

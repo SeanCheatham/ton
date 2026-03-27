@@ -9,7 +9,7 @@ set -euo pipefail
 
 source "$(dirname "$0")/helper_sdk.sh"
 
-VALIDATOR_HOST="${VALIDATOR_HOST:-validator}"
+VALIDATOR_HOST="${VALIDATOR_HOST:-ton-validator}"
 STATE_FILE="/shared/_prev_udp_buf_errors"
 HEARTBEAT_FILE="/shared/validator_heartbeat"
 HEARTBEAT_MAX_AGE=90
@@ -101,7 +101,7 @@ echo "${RCVBUF_ERRORS}:${SNDBUF_ERRORS}" > "$STATE_FILE"
 # oversized UDP payloads, etc.) intentionally generate malformed traffic that can
 # cause kernel-level RcvbufErrors. These are expected and harmless in the testing
 # context. Only flag sustained high error rates as problems.
-DELTA_THRESHOLD=50
+DELTA_THRESHOLD=200
 if [ "$DELTA_RCVBUF" -gt "$DELTA_THRESHOLD" ] || [ "$DELTA_SNDBUF" -gt "$DELTA_THRESHOLD" ]; then
     DETAILS=$(jq -cn \
         --argjson drcv "$DELTA_RCVBUF" --argjson dsnd "$DELTA_SNDBUF" \

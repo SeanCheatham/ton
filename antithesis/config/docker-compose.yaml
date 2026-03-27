@@ -1,7 +1,7 @@
 services:
   validator:
-    container_name: validator
-    hostname: validator
+    container_name: ton-validator
+    hostname: ton-validator
     platform: linux/amd64
     build:
       context: ../..
@@ -21,8 +21,8 @@ services:
       - shared:/shared
 
   validator2:
-    container_name: validator2
-    hostname: validator2
+    container_name: ton-validator2
+    hostname: ton-validator2
     platform: linux/amd64
     build:
       context: ../..
@@ -42,8 +42,8 @@ services:
       - shared:/shared
 
   validator3:
-    container_name: validator3
-    hostname: validator3
+    container_name: ton-validator3
+    hostname: ton-validator3
     platform: linux/amd64
     build:
       context: ../..
@@ -63,8 +63,8 @@ services:
       - shared:/shared
 
   workload:
-    container_name: workload
-    hostname: workload
+    container_name: ton-workload
+    hostname: ton-workload
     platform: linux/amd64
     build:
       context: ../..
@@ -72,9 +72,9 @@ services:
       target: workload
     image: seanton-workload:latest
     environment:
-      - VALIDATOR_HOST=validator
-      - VALIDATOR2_HOST=validator2
-      - VALIDATOR3_HOST=validator3
+      - VALIDATOR_HOST=ton-validator
+      - VALIDATOR2_HOST=ton-validator2
+      - VALIDATOR3_HOST=ton-validator3
       - VALIDATOR_PORT=30001
       - CONSOLE_PORT=30002
       - LITE_PORT=30003

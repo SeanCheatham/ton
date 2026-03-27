@@ -9,7 +9,7 @@ set -euo pipefail
 
 source "$(dirname "$0")/helper_sdk.sh"
 
-VALIDATOR_HOST="${VALIDATOR_HOST:-validator}"
+VALIDATOR_HOST="${VALIDATOR_HOST:-ton-validator}"
 
 if [ ! -f /shared/validator_net_errors ]; then
     echo "Net errors file not present yet, skipping"

@@ -9,7 +9,7 @@ set -euo pipefail
 
 source "$(dirname "$0")/helper_sdk.sh"
 
-VALIDATOR_HOST="${VALIDATOR_HOST:-validator}"
+VALIDATOR_HOST="${VALIDATOR_HOST:-ton-validator}"
 HEARTBEAT_MAX_AGE=60
 ASSERTION_NAME="RocksDB SST files exist when validator is healthy"
 # Grace period: don't assert until validator has been up for at least 180s

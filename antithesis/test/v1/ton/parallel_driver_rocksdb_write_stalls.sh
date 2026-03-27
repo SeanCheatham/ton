@@ -8,7 +8,7 @@ set -euo pipefail
 source "$(dirname "$0")/helper_sdk.sh"
 
 ASSERTION_NAME="RocksDB LOG contains no write stall indicators when validator is healthy"
-VALIDATOR_HOST="${VALIDATOR_HOST:-validator}"
+VALIDATOR_HOST="${VALIDATOR_HOST:-ton-validator}"
 
 # Precondition: heartbeat fresh
 HEARTBEAT_FILE="/shared/validator_heartbeat"

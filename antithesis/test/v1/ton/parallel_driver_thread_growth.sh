@@ -10,7 +10,7 @@ set -euo pipefail
 source "$(dirname "$0")/helper_sdk.sh"
 
 ASSERTION_NAME="Validator thread count is not monotonically growing"
-VALIDATOR_HOST="${VALIDATOR_HOST:-validator}"
+VALIDATOR_HOST="${VALIDATOR_HOST:-ton-validator}"
 MIN_ENTRIES=5
 GROWTH_THRESHOLD=20
 HEARTBEAT_MAX_AGE=60

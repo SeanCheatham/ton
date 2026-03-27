@@ -8,7 +8,7 @@
 source "$(dirname "$0")/helper_sdk.sh"
 
 ASSERTION_NAME="Validator heartbeat interval is regular when healthy"
-VALIDATOR_HOST="${VALIDATOR_HOST:-validator}"
+VALIDATOR_HOST="${VALIDATOR_HOST:-ton-validator}"
 MAX_INTERVAL=300
 PREV_FILE="/shared/validator_heartbeat_prev_check"
 PREV_WALLCLOCK_FILE="/shared/validator_heartbeat_prev_check_wallclock"

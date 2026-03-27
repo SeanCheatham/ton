@@ -13,7 +13,7 @@
 source "$(dirname "$0")/helper_sdk.sh"
 
 ASSERTION_NAME="Validator listening socket count matches expected"
-VALIDATOR_HOST="${VALIDATOR_HOST:-validator}"
+VALIDATOR_HOST="${VALIDATOR_HOST:-ton-validator}"
 HEARTBEAT_MAX_AGE=60
 
 # Precondition: heartbeat must be fresh

@@ -9,7 +9,7 @@ set -euo pipefail
 
 source "$(dirname "$0")/helper_sdk.sh"
 
-VALIDATOR_HOST="${VALIDATOR_HOST:-validator}"
+VALIDATOR_HOST="${VALIDATOR_HOST:-ton-validator}"
 STATE_FILE="/shared/_prev_tcp_conn_failures"
 HEARTBEAT_FILE="/shared/validator_heartbeat"
 HEARTBEAT_MAX_AGE=90
@@ -97,7 +97,12 @@ DELTA_ER=$((ESTAB_RESETS - PREV_ER))
 # Update baseline
 echo "${ATTEMPT_FAILS}:${ESTAB_RESETS}" > "$STATE_FILE"
 
-if [ "$DELTA_AF" -gt 0 ] || [ "$DELTA_ER" -gt 0 ]; then
+# Allow a small delta threshold. Concurrent adversarial workloads (TCP flood,
+# fuzz, timebomb scripts) intentionally create failing connections. Only flag
+# sustained high failure rates as real problems.
+DELTA_AF_THRESHOLD=30
+DELTA_ER_THRESHOLD=30
+if [ "$DELTA_AF" -gt "$DELTA_AF_THRESHOLD" ] || [ "$DELTA_ER" -gt "$DELTA_ER_THRESHOLD" ]; then
     DETAILS=$(jq -cn \
         --argjson daf "$DELTA_AF" --argjson der "$DELTA_ER" \
         --argjson af "$ATTEMPT_FAILS" --argjson er "$ESTAB_RESETS" \

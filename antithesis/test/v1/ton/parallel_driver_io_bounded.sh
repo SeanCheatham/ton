@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 source /opt/antithesis/test/v1/ton/helper_sdk.sh
-VALIDATOR_HOST="${VALIDATOR_HOST:-validator}"
+VALIDATOR_HOST="${VALIDATOR_HOST:-ton-validator}"
 PROPERTY="Validator I/O wait time is bounded"
 IO_DELTA_LIMIT=500
 STATE_FILE="/shared/validator_io_ticks_prev"

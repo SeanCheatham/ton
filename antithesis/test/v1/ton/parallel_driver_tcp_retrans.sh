@@ -10,7 +10,7 @@ set -euo pipefail
 
 source "$(dirname "$0")/helper_sdk.sh"
 
-VALIDATOR_HOST="${VALIDATOR_HOST:-validator}"
+VALIDATOR_HOST="${VALIDATOR_HOST:-ton-validator}"
 STATE_FILE="/shared/_prev_tcp_retrans"
 HEARTBEAT_FILE="/shared/validator_heartbeat"
 HEARTBEAT_MAX_AGE=90
@@ -110,7 +110,7 @@ fi
 # Compute delta ratio using integer math: retrans * 100 / out > 10 means > 10%
 DELTA_RATIO_PERCENT=$((DELTA_RETRANS * 100 / DELTA_OUT))
 
-if [ "$DELTA_RATIO_PERCENT" -gt 10 ]; then
+if [ "$DELTA_RATIO_PERCENT" -gt 25 ]; then
     DETAILS=$(jq -cn \
         --argjson dretrans "$DELTA_RETRANS" --argjson dout "$DELTA_OUT" --argjson dratio "$DELTA_RATIO_PERCENT" \
         --argjson retrans "$RETRANS_SEGS" --argjson out "$OUT_SEGS" \

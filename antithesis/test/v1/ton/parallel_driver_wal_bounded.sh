@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 source /opt/antithesis/test/v1/ton/helper_sdk.sh
-VALIDATOR_HOST="${VALIDATOR_HOST:-validator}"
+VALIDATOR_HOST="${VALIDATOR_HOST:-ton-validator}"
 PROPERTY="RocksDB WAL file count is bounded"
 WAL_LIMIT=50
 

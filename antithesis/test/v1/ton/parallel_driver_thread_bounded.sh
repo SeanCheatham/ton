@@ -9,7 +9,7 @@ set -euo pipefail
 source "$(dirname "$0")/helper_sdk.sh"
 
 THREAD_LIMIT=200
-VALIDATOR_HOST="${VALIDATOR_HOST:-validator}"
+VALIDATOR_HOST="${VALIDATOR_HOST:-ton-validator}"
 
 if [ ! -f /shared/validator_thread_count ]; then
     echo "Thread count file not present yet, skipping"

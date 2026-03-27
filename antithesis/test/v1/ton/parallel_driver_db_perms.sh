@@ -9,7 +9,7 @@ set -euo pipefail
 source "$(dirname "$0")/helper_sdk.sh"
 
 ASSERTION_NAME="Validator database file permissions are correct when healthy"
-VALIDATOR_HOST="${VALIDATOR_HOST:-validator}"
+VALIDATOR_HOST="${VALIDATOR_HOST:-ton-validator}"
 VALIDATOR_PORT="${VALIDATOR_PORT:-30001}"
 CONSOLE_PORT="${CONSOLE_PORT:-30002}"
 LITE_PORT="${LITE_PORT:-30003}"

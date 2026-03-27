@@ -8,9 +8,9 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/helper_sdk.sh"
 
-VALIDATOR_HOST="${VALIDATOR_HOST:-validator}"
-VALIDATOR2_HOST="${VALIDATOR2_HOST:-validator2}"
-VALIDATOR3_HOST="${VALIDATOR3_HOST:-validator3}"
+VALIDATOR_HOST="${VALIDATOR_HOST:-ton-validator}"
+VALIDATOR2_HOST="${VALIDATOR2_HOST:-ton-validator2}"
+VALIDATOR3_HOST="${VALIDATOR3_HOST:-ton-validator3}"
 LITE_PORT="${LITE_PORT:-30003}"
 ASSERTION_NAME="Multiple validators returned consistent state"
 HEARTBEAT_MAX_AGE=60

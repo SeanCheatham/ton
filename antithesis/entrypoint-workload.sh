@@ -5,9 +5,9 @@ set -euo pipefail
 # Waits for all validators to be ready, then emits setup_complete and sleeps.
 # Test Composer will run test commands from /opt/antithesis/test/v1/ton/.
 
-VALIDATOR_HOST="${VALIDATOR_HOST:-validator}"
-VALIDATOR2_HOST="${VALIDATOR2_HOST:-validator2}"
-VALIDATOR3_HOST="${VALIDATOR3_HOST:-validator3}"
+VALIDATOR_HOST="${VALIDATOR_HOST:-ton-validator}"
+VALIDATOR2_HOST="${VALIDATOR2_HOST:-ton-validator2}"
+VALIDATOR3_HOST="${VALIDATOR3_HOST:-ton-validator3}"
 VALIDATOR_PORT="${VALIDATOR_PORT:-30001}"
 
 CONSOLE_PORT="${CONSOLE_PORT:-30002}"

@@ -35,6 +35,15 @@ else
     exit 0
 fi
 
+# Wait for genesis coordination to complete before checking config.
+# The global config is written during Phase B of genesis coordination;
+# checking before it's ready produces false positives.
+if [ ! -f /shared/genesis/.genesis_ready ]; then
+    echo "Genesis not ready yet, skipping"
+    sdk_always true "$ASSERTION_NAME" '{"status":"skipped","reason":"genesis_not_ready"}'
+    exit 0
+fi
+
 # Read the validator's config.json which contains runtime parameters
 CONFIG="/shared/liteserver.config.json"
 if [ ! -f "$CONFIG" ]; then
