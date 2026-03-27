@@ -1,15 +1,18 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Parallel driver: Validator has no UDP buffer errors when healthy
+# Parallel driver: Validator has no UDP buffer errors when healthy (delta-based)
 # Reads /shared/validator_udp_buf_errors (RcvbufErrors:SndbufErrors from /proc/1/net/snmp)
-# written by validator entrypoint heartbeat loop and asserts both counts are zero when
-# the validator is healthy. Non-zero counts indicate silent UDP packet loss due to
-# kernel buffer overflows — critical for TON's ADNL protocol on UDP:30001.
+# written by validator entrypoint heartbeat loop and asserts no new errors have appeared
+# since the last observation while the validator is healthy. Cumulative counters may be
+# non-zero due to intentional attack scripts (UDP flood, etc.), so we track deltas.
 
 source "$(dirname "$0")/helper_sdk.sh"
 
 VALIDATOR_HOST="${VALIDATOR_HOST:-validator}"
+STATE_FILE="/shared/_prev_udp_buf_errors"
+HEARTBEAT_FILE="/shared/validator_heartbeat"
+HEARTBEAT_MAX_AGE=90
 
 if [ ! -f /shared/validator_udp_buf_errors ]; then
     echo "UDP buffer errors file not present yet, skipping"
@@ -48,11 +51,63 @@ if [[ "$udp_up" != "true" || "$console_up" != "true" || "$lite_up" != "true" ]];
     exit 0
 fi
 
-if [ "$RCVBUF_ERRORS" -gt 0 ] || [ "$SNDBUF_ERRORS" -gt 0 ]; then
-    DETAILS=$(jq -cn --argjson rcv "$RCVBUF_ERRORS" --argjson snd "$SNDBUF_ERRORS" '{rcvbuf_errors: $rcv, sndbuf_errors: $snd}')
+# Check heartbeat freshness
+if [ ! -f "$HEARTBEAT_FILE" ]; then
+    echo "Heartbeat file not present, skipping"
+    sleep 10
+    exit 0
+fi
+
+HEARTBEAT_TS=$(cat "$HEARTBEAT_FILE" 2>/dev/null || echo "0")
+NOW=$(date +%s)
+HEARTBEAT_AGE=$((NOW - HEARTBEAT_TS))
+
+if [ "$HEARTBEAT_AGE" -gt "$HEARTBEAT_MAX_AGE" ]; then
+    echo "Heartbeat too old (${HEARTBEAT_AGE}s > ${HEARTBEAT_MAX_AGE}s), skipping"
+    sleep 10
+    exit 0
+fi
+
+# First observation or counter reset: store baseline and skip
+if [ ! -f "$STATE_FILE" ]; then
+    echo "${RCVBUF_ERRORS}:${SNDBUF_ERRORS}" > "$STATE_FILE"
+    echo "First observation, storing baseline rcv=$RCVBUF_ERRORS snd=$SNDBUF_ERRORS"
+    sdk_always true "Validator has no UDP buffer errors when healthy" '{"status":"first_observation","rcvbuf_errors":0,"sndbuf_errors":0}'
+    sleep 10
+    exit 0
+fi
+
+PREV=$(cat "$STATE_FILE" 2>/dev/null || echo "0:0")
+PREV_RCVBUF=$(echo "$PREV" | cut -d: -f1)
+PREV_SNDBUF=$(echo "$PREV" | cut -d: -f2)
+
+# Counter reset detection (current < previous means kernel counter wrapped or process restarted)
+if [ "$RCVBUF_ERRORS" -lt "$PREV_RCVBUF" ] || [ "$SNDBUF_ERRORS" -lt "$PREV_SNDBUF" ]; then
+    echo "${RCVBUF_ERRORS}:${SNDBUF_ERRORS}" > "$STATE_FILE"
+    echo "Counter reset detected, resetting baseline rcv=$RCVBUF_ERRORS snd=$SNDBUF_ERRORS"
+    sdk_always true "Validator has no UDP buffer errors when healthy" '{"status":"counter_reset","rcvbuf_errors":0,"sndbuf_errors":0}'
+    sleep 10
+    exit 0
+fi
+
+# Compute deltas
+DELTA_RCVBUF=$((RCVBUF_ERRORS - PREV_RCVBUF))
+DELTA_SNDBUF=$((SNDBUF_ERRORS - PREV_SNDBUF))
+
+# Update baseline
+echo "${RCVBUF_ERRORS}:${SNDBUF_ERRORS}" > "$STATE_FILE"
+
+if [ "$DELTA_RCVBUF" -gt 0 ] || [ "$DELTA_SNDBUF" -gt 0 ]; then
+    DETAILS=$(jq -cn \
+        --argjson drcv "$DELTA_RCVBUF" --argjson dsnd "$DELTA_SNDBUF" \
+        --argjson rcv "$RCVBUF_ERRORS" --argjson snd "$SNDBUF_ERRORS" \
+        '{delta_rcvbuf_errors: $drcv, delta_sndbuf_errors: $dsnd, cumulative_rcvbuf: $rcv, cumulative_sndbuf: $snd}')
     sdk_always false "Validator has no UDP buffer errors when healthy" "$DETAILS"
 else
-    sdk_always true "Validator has no UDP buffer errors when healthy" '{"rcvbuf_errors":0,"sndbuf_errors":0}'
+    DETAILS=$(jq -cn \
+        --argjson rcv "$RCVBUF_ERRORS" --argjson snd "$SNDBUF_ERRORS" \
+        '{delta_rcvbuf_errors: 0, delta_sndbuf_errors: 0, cumulative_rcvbuf: $rcv, cumulative_sndbuf: $snd}')
+    sdk_always true "Validator has no UDP buffer errors when healthy" "$DETAILS"
 fi
 
 sleep 10

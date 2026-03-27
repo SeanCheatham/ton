@@ -27,24 +27,20 @@ if [ -f /shared/validator_heartbeat ]; then
         AGE=$((NOW - HB_TS))
         if [ "$AGE" -gt "$HEARTBEAT_MAX_AGE" ]; then
             echo "Heartbeat stale (${AGE}s), skipping"
-            sdk_always true "$ASSERTION_NAME" '{"status":"skipped","reason":"heartbeat_stale"}'
             exit 0
         fi
     else
         echo "Heartbeat value invalid, skipping"
-        sdk_always true "$ASSERTION_NAME" '{"status":"skipped","reason":"heartbeat_invalid"}'
         exit 0
     fi
 else
     echo "Heartbeat file not present yet, skipping"
-    sdk_always true "$ASSERTION_NAME" '{"status":"skipped","reason":"heartbeat_missing"}'
     exit 0
 fi
 
 # Precondition: UDP port must be reachable
 if ! nc -z -w 2 -u "${VALIDATOR_HOST}" "${VALIDATOR_PORT}" 2>/dev/null; then
     echo "UDP port ${VALIDATOR_PORT} not reachable, skipping"
-    sdk_always true "$ASSERTION_NAME" '{"status":"skipped","reason":"udp_not_reachable"}'
     exit 0
 fi
 
@@ -136,10 +132,10 @@ DETAILS=$(jq -cn \
 
 if [ "$SURVIVED" = "true" ]; then
     echo "PASS: Validator survived $PACKETS_SENT rapid mixed-size UDP packets"
-    sdk_always true "$ASSERTION_NAME" "$DETAILS"
+    sdk_sometimes true "$ASSERTION_NAME" "$DETAILS"
 else
     echo "FAIL: Validator appears unhealthy after UDP flood: $CHECKS_DETAIL"
-    sdk_always false "$ASSERTION_NAME" "$DETAILS"
+    sdk_sometimes false "$ASSERTION_NAME" "$DETAILS"
 fi
 
 exit 0

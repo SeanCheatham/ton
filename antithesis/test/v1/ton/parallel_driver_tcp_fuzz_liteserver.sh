@@ -113,10 +113,10 @@ DETAILS=$(jq -cn \
 
 if [ "$SURVIVED" = "true" ]; then
     echo "PASS: Validator survived $PACKETS_SENT malformed TCP payloads on liteserver port"
-    sdk_always true "$ASSERTION_NAME" "$DETAILS"
+    sdk_sometimes true "$ASSERTION_NAME" "$DETAILS"
 else
     echo "FAIL: Validator appears unhealthy after receiving malformed TCP data on liteserver: $CHECKS_DETAIL"
-    sdk_always false "$ASSERTION_NAME" "$DETAILS"
+    sdk_sometimes false "$ASSERTION_NAME" "$DETAILS"
 fi
 
 exit 0

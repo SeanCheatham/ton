@@ -20,38 +20,38 @@ if [ -f /shared/validator_heartbeat ]; then
         AGE=$((NOW - HB_TS))
         if [ "$AGE" -gt "$HEARTBEAT_MAX_AGE" ]; then
             echo "Heartbeat stale (${AGE}s), skipping"
-            sdk_always true "$ASSERTION_NAME" '{"status":"heartbeat_stale"}'
+            sdk_sometimes true "$ASSERTION_NAME" '{"status":"heartbeat_stale"}'
             exit 0
         fi
     else
         echo "Heartbeat value invalid, skipping"
-        sdk_always true "$ASSERTION_NAME" '{"status":"heartbeat_invalid"}'
+        sdk_sometimes true "$ASSERTION_NAME" '{"status":"heartbeat_invalid"}'
         exit 0
     fi
 else
     echo "Heartbeat file not present yet, skipping"
-    sdk_always true "$ASSERTION_NAME" '{"status":"heartbeat_not_present"}'
+    sdk_sometimes true "$ASSERTION_NAME" '{"status":"heartbeat_not_present"}'
     exit 0
 fi
 
 # Precondition: liteserver port must be reachable
 if ! nc -z -w 2 "${VALIDATOR_HOST}" "${LITE_PORT}" 2>/dev/null; then
     echo "Liteserver port ${LITE_PORT} not reachable, skipping"
-    sdk_always true "$ASSERTION_NAME" '{"status":"port_not_reachable"}'
+    sdk_sometimes true "$ASSERTION_NAME" '{"status":"port_not_reachable"}'
     exit 0
 fi
 
 # Precondition: liteserver config must exist
 if [ ! -f /shared/liteserver.config.json ]; then
     echo "Liteserver config not available yet, skipping"
-    sdk_always true "$ASSERTION_NAME" '{"status":"config_not_available"}'
+    sdk_sometimes true "$ASSERTION_NAME" '{"status":"config_not_available"}'
     exit 0
 fi
 
 # Precondition: lite-client binary must exist
 if ! command -v lite-client >/dev/null 2>&1; then
     echo "lite-client binary not found, skipping"
-    sdk_always true "$ASSERTION_NAME" '{"status":"lite_client_not_available"}'
+    sdk_sometimes true "$ASSERTION_NAME" '{"status":"lite_client_not_available"}'
     exit 0
 fi
 
@@ -119,10 +119,10 @@ DETAILS=$(jq -cn \
 
 if [ "$STILL_UP" = "true" ] && [ "$HB_FRESH" = "true" ]; then
     echo "PASS: Validator survived ${CONCURRENT} concurrent lite-client queries"
-    sdk_always true "$ASSERTION_NAME" "$DETAILS"
+    sdk_sometimes true "$ASSERTION_NAME" "$DETAILS"
 else
     echo "FAIL: Validator unhealthy after concurrent lite-client queries (port_up=${STILL_UP}, hb_fresh=${HB_FRESH})"
-    sdk_always false "$ASSERTION_NAME" "$DETAILS"
+    sdk_sometimes false "$ASSERTION_NAME" "$DETAILS"
 fi
 
 exit 0

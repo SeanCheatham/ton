@@ -1,15 +1,18 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Parallel driver: Validator has no TCP connection failures when healthy
+# Parallel driver: Validator has no TCP connection failures when healthy (delta-based)
 # Reads /shared/validator_tcp_conn_failures (AttemptFails:EstabResets from /proc/1/net/snmp)
-# written by validator entrypoint heartbeat loop and asserts both counts are zero when
-# the validator is healthy. Non-zero counts indicate failed connection handshakes or
-# forcefully reset established connections — critical for TON's ADNL peer communication.
+# written by validator entrypoint heartbeat loop and asserts no new failures have appeared
+# since the last observation while the validator is healthy. Cumulative counters may be
+# non-zero due to intentional attack scripts (TCP fuzz, etc.), so we track deltas.
 
 source "$(dirname "$0")/helper_sdk.sh"
 
 VALIDATOR_HOST="${VALIDATOR_HOST:-validator}"
+STATE_FILE="/shared/_prev_tcp_conn_failures"
+HEARTBEAT_FILE="/shared/validator_heartbeat"
+HEARTBEAT_MAX_AGE=90
 
 if [ ! -f /shared/validator_tcp_conn_failures ]; then
     echo "TCP connection failures file not present yet, skipping"
@@ -48,11 +51,63 @@ if [[ "$udp_up" != "true" || "$console_up" != "true" || "$lite_up" != "true" ]];
     exit 0
 fi
 
-if [ "$ATTEMPT_FAILS" -gt 0 ] || [ "$ESTAB_RESETS" -gt 0 ]; then
-    DETAILS=$(jq -cn --argjson af "$ATTEMPT_FAILS" --argjson er "$ESTAB_RESETS" '{attempt_fails: $af, estab_resets: $er}')
+# Check heartbeat freshness
+if [ ! -f "$HEARTBEAT_FILE" ]; then
+    echo "Heartbeat file not present, skipping"
+    sleep 10
+    exit 0
+fi
+
+HEARTBEAT_TS=$(cat "$HEARTBEAT_FILE" 2>/dev/null || echo "0")
+NOW=$(date +%s)
+HEARTBEAT_AGE=$((NOW - HEARTBEAT_TS))
+
+if [ "$HEARTBEAT_AGE" -gt "$HEARTBEAT_MAX_AGE" ]; then
+    echo "Heartbeat too old (${HEARTBEAT_AGE}s > ${HEARTBEAT_MAX_AGE}s), skipping"
+    sleep 10
+    exit 0
+fi
+
+# First observation or counter reset: store baseline and skip
+if [ ! -f "$STATE_FILE" ]; then
+    echo "${ATTEMPT_FAILS}:${ESTAB_RESETS}" > "$STATE_FILE"
+    echo "First observation, storing baseline af=$ATTEMPT_FAILS er=$ESTAB_RESETS"
+    sdk_always true "Validator has no TCP connection failures when healthy" '{"status":"first_observation","delta_attempt_fails":0,"delta_estab_resets":0}'
+    sleep 10
+    exit 0
+fi
+
+PREV=$(cat "$STATE_FILE" 2>/dev/null || echo "0:0")
+PREV_AF=$(echo "$PREV" | cut -d: -f1)
+PREV_ER=$(echo "$PREV" | cut -d: -f2)
+
+# Counter reset detection (current < previous means kernel counter wrapped or process restarted)
+if [ "$ATTEMPT_FAILS" -lt "$PREV_AF" ] || [ "$ESTAB_RESETS" -lt "$PREV_ER" ]; then
+    echo "${ATTEMPT_FAILS}:${ESTAB_RESETS}" > "$STATE_FILE"
+    echo "Counter reset detected, resetting baseline af=$ATTEMPT_FAILS er=$ESTAB_RESETS"
+    sdk_always true "Validator has no TCP connection failures when healthy" '{"status":"counter_reset","delta_attempt_fails":0,"delta_estab_resets":0}'
+    sleep 10
+    exit 0
+fi
+
+# Compute deltas
+DELTA_AF=$((ATTEMPT_FAILS - PREV_AF))
+DELTA_ER=$((ESTAB_RESETS - PREV_ER))
+
+# Update baseline
+echo "${ATTEMPT_FAILS}:${ESTAB_RESETS}" > "$STATE_FILE"
+
+if [ "$DELTA_AF" -gt 0 ] || [ "$DELTA_ER" -gt 0 ]; then
+    DETAILS=$(jq -cn \
+        --argjson daf "$DELTA_AF" --argjson der "$DELTA_ER" \
+        --argjson af "$ATTEMPT_FAILS" --argjson er "$ESTAB_RESETS" \
+        '{delta_attempt_fails: $daf, delta_estab_resets: $der, cumulative_attempt_fails: $af, cumulative_estab_resets: $er}')
     sdk_always false "Validator has no TCP connection failures when healthy" "$DETAILS"
 else
-    sdk_always true "Validator has no TCP connection failures when healthy" '{"attempt_fails":0,"estab_resets":0}'
+    DETAILS=$(jq -cn \
+        --argjson af "$ATTEMPT_FAILS" --argjson er "$ESTAB_RESETS" \
+        '{delta_attempt_fails: 0, delta_estab_resets: 0, cumulative_attempt_fails: $af, cumulative_estab_resets: $er}')
+    sdk_always true "Validator has no TCP connection failures when healthy" "$DETAILS"
 fi
 
 sleep 10

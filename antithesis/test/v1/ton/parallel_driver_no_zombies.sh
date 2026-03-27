@@ -25,6 +25,24 @@ udp_up=false
 console_up=false
 lite_up=false
 
+# Heartbeat precondition: validator process must be alive
+HEARTBEAT_MAX_AGE=90
+if [ -f /shared/validator_heartbeat ]; then
+    HB_TS=$(cat /shared/validator_heartbeat 2>/dev/null | tr -d '[:space:]')
+    NOW=$(date +%s)
+    if [[ "$HB_TS" =~ ^[0-9]+$ ]]; then
+        AGE=$((NOW - HB_TS))
+        if [ "$AGE" -gt "$HEARTBEAT_MAX_AGE" ]; then
+            echo "Heartbeat stale (${AGE}s), skipping"
+            exit 0
+        fi
+    else
+        echo "Heartbeat invalid, skipping"; exit 0
+    fi
+else
+    echo "Heartbeat not present, skipping"; exit 0
+fi
+
 nc -z -u -w 2 "${VALIDATOR_HOST}" "${UDP_PORT}" 2>/dev/null && udp_up=true
 nc -z -w 1 "${VALIDATOR_HOST}" "${CONSOLE_PORT}" 2>/dev/null && console_up=true
 nc -z -w 1 "${VALIDATOR_HOST}" "${LITE_PORT}" 2>/dev/null && lite_up=true

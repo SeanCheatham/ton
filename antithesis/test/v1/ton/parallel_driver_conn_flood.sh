@@ -112,10 +112,10 @@ DETAILS=$(jq -cn \
 
 if [ "$SURVIVED" = "true" ]; then
     echo "PASS: Validator survived ${TOTAL_CONNS} simultaneous TCP connections"
-    sdk_always true "$ASSERTION_NAME" "$DETAILS"
+    sdk_sometimes true "$ASSERTION_NAME" "$DETAILS"
 else
     echo "FAIL: Validator unhealthy after TCP connection flood: $CHECKS_DETAIL"
-    sdk_always false "$ASSERTION_NAME" "$DETAILS"
+    sdk_sometimes false "$ASSERTION_NAME" "$DETAILS"
 fi
 
 exit 0

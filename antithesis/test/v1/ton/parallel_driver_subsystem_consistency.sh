@@ -20,6 +20,24 @@ sdk_catalog_always "Validator subsystem consistency: all ports reachable togethe
 
 echo "Checking validator subsystem consistency..."
 
+# Heartbeat precondition: validator process must be alive
+HEARTBEAT_MAX_AGE=90
+if [ -f /shared/validator_heartbeat ]; then
+    HB_TS=$(cat /shared/validator_heartbeat 2>/dev/null | tr -d '[:space:]')
+    NOW=$(date +%s)
+    if [[ "$HB_TS" =~ ^[0-9]+$ ]]; then
+        AGE=$((NOW - HB_TS))
+        if [ "$AGE" -gt "$HEARTBEAT_MAX_AGE" ]; then
+            echo "Heartbeat stale (${AGE}s), skipping"
+            exit 0
+        fi
+    else
+        echo "Heartbeat invalid, skipping"; exit 0
+    fi
+else
+    echo "Heartbeat not present, skipping"; exit 0
+fi
+
 # Step 1: Check if the main UDP port is reachable.
 # If it's down, the validator is fully down — skip the consistency check.
 if ! nc -z -u -w 2 "${VALIDATOR_HOST}" "${UDP_PORT}" 2>/dev/null; then

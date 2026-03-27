@@ -25,6 +25,19 @@ sdk_catalog_always "${ASSERTION_NAME}"
 
 echo "Checking validator database directory count..."
 
+# Detect validator restart via startup_id — reset previous count on restart.
+# After Antithesis restarts a container, the DB directory structure may change;
+# comparing against pre-restart counts would produce false violations.
+STARTUP_ID_FILE="/shared/validator_startup_id"
+PREV_STARTUP_FILE="/shared/_prev_db_dirs_startup_id"
+CURRENT_STARTUP=$(cat "$STARTUP_ID_FILE" 2>/dev/null | tr -d '[:space:]')
+PREV_STARTUP=$(cat "$PREV_STARTUP_FILE" 2>/dev/null | tr -d '[:space:]')
+if [ -n "$CURRENT_STARTUP" ] && [ "$CURRENT_STARTUP" != "$PREV_STARTUP" ]; then
+    echo "Validator restarted (startup_id changed), resetting previous count"
+    echo "$CURRENT_STARTUP" > "$PREV_STARTUP_FILE"
+    rm -f "$PREV_FILE"
+fi
+
 # Use heartbeat-only precondition instead of all-3-ports.
 if [[ ! -f "$HEARTBEAT_FILE" ]]; then
     echo "SKIP: heartbeat file does not exist yet"

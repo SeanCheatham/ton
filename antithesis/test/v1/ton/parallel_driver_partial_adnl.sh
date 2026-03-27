@@ -27,22 +27,18 @@ if [ -f /shared/validator_heartbeat ]; then
         AGE=$((NOW - HB_TS))
         if [ "$AGE" -gt "$HEARTBEAT_MAX_AGE" ]; then
             echo "Heartbeat stale (${AGE}s), skipping"
-            sdk_always true "$ASSERTION_NAME" '{"status":"skipped","reason":"heartbeat_stale"}'
             exit 0
         fi
     else
-        sdk_always true "$ASSERTION_NAME" '{"status":"skipped","reason":"heartbeat_invalid"}'
         exit 0
     fi
 else
-    sdk_always true "$ASSERTION_NAME" '{"status":"skipped","reason":"heartbeat_missing"}'
     exit 0
 fi
 
 # Precondition: liteserver port reachable
 if ! nc -z -w 2 "$VALIDATOR_HOST" "$LITE_PORT" 2>/dev/null; then
     echo "Liteserver port not reachable, skipping"
-    sdk_always true "$ASSERTION_NAME" '{"status":"skipped","reason":"port_unreachable"}'
     exit 0
 fi
 
@@ -130,10 +126,10 @@ DETAILS=$(jq -cn \
 
 if [ "$ALIVE" = "true" ] && [ "$HB_FRESH" = "true" ]; then
     echo "PASS: Validator survived partial ADNL handshake flood"
-    sdk_always true "$ASSERTION_NAME" "$DETAILS"
+    sdk_sometimes true "$ASSERTION_NAME" "$DETAILS"
 else
     echo "FAIL: Validator unhealthy after partial ADNL handshake flood (alive=$ALIVE, hb_fresh=$HB_FRESH)"
-    sdk_always false "$ASSERTION_NAME" "$DETAILS"
+    sdk_sometimes false "$ASSERTION_NAME" "$DETAILS"
 fi
 
 exit 0

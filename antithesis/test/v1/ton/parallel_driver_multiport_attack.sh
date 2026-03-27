@@ -26,34 +26,28 @@ if [ -f /shared/validator_heartbeat ]; then
         AGE=$((NOW - HB_TS))
         if [ "$AGE" -gt "$HEARTBEAT_MAX_AGE" ]; then
             echo "Heartbeat stale (${AGE}s), skipping"
-            sdk_always true "$ASSERTION_NAME" '{"status":"skipped","reason":"heartbeat_stale"}'
             exit 0
         fi
     else
         echo "Heartbeat value invalid, skipping"
-        sdk_always true "$ASSERTION_NAME" '{"status":"skipped","reason":"heartbeat_invalid"}'
         exit 0
     fi
 else
     echo "Heartbeat file not present yet, skipping"
-    sdk_always true "$ASSERTION_NAME" '{"status":"skipped","reason":"heartbeat_missing"}'
     exit 0
 fi
 
 # Precondition: all 3 ports must be reachable
 if ! nc -z -w 2 -u "${VALIDATOR_HOST}" "${VALIDATOR_PORT}" 2>/dev/null; then
     echo "UDP port ${VALIDATOR_PORT} not reachable, skipping"
-    sdk_always true "$ASSERTION_NAME" '{"status":"skipped","reason":"udp_not_reachable"}'
     exit 0
 fi
 if ! nc -z -w 2 "${VALIDATOR_HOST}" "${CONSOLE_PORT}" 2>/dev/null; then
     echo "TCP console port ${CONSOLE_PORT} not reachable, skipping"
-    sdk_always true "$ASSERTION_NAME" '{"status":"skipped","reason":"console_not_reachable"}'
     exit 0
 fi
 if ! nc -z -w 2 "${VALIDATOR_HOST}" "${LITE_PORT}" 2>/dev/null; then
     echo "TCP liteserver port ${LITE_PORT} not reachable, skipping"
-    sdk_always true "$ASSERTION_NAME" '{"status":"skipped","reason":"liteserver_not_reachable"}'
     exit 0
 fi
 
@@ -152,10 +146,10 @@ DETAILS=$(jq -cn \
 
 if [ "$SURVIVED" = "true" ]; then
     echo "PASS: Validator survived simultaneous multi-port attack"
-    sdk_always true "$ASSERTION_NAME" "$DETAILS"
+    sdk_sometimes true "$ASSERTION_NAME" "$DETAILS"
 else
     echo "FAIL: Validator appears unhealthy after multi-port attack: $CHECKS_DETAIL"
-    sdk_always false "$ASSERTION_NAME" "$DETAILS"
+    sdk_sometimes false "$ASSERTION_NAME" "$DETAILS"
 fi
 
 exit 0

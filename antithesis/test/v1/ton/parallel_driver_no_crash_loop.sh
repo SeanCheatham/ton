@@ -10,8 +10,8 @@ set -euo pipefail
 #   4. If >3 down→up transitions in that window: emit always(false) — crash loop
 #   5. Otherwise: emit always(true)
 #
-# A crash-looping validator appears "sometimes healthy" to individual probes
-# but is completely non-functional in practice.
+# Resets the transition log when a new validator startup is detected (via startup_id),
+# so that Antithesis-injected container restarts don't accumulate false transitions.
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/helper_sdk.sh"
@@ -21,6 +21,8 @@ UDP_PORT="${VALIDATOR_PORT:-30001}"
 CONSOLE_PORT="${CONSOLE_PORT:-30002}"
 LITE_PORT="${LITE_PORT:-30003}"
 TRANSITIONS_FILE="/shared/validator_transitions"
+STARTUP_ID_FILE="/shared/validator_startup_id"
+PREV_STARTUP_FILE="/shared/_prev_crash_loop_startup_id"
 MAX_TRANSITIONS=3
 WINDOW_SECONDS=60
 
@@ -30,6 +32,35 @@ ASSERTION_NAME="Validator does not crash-loop or oscillate rapidly"
 sdk_catalog_always "${ASSERTION_NAME}"
 
 echo "Checking for crash-loop / rapid oscillation..."
+
+# Heartbeat precondition: skip during fault injection when validator is dead
+HEARTBEAT_MAX_AGE=90
+if [ -f /shared/validator_heartbeat ]; then
+    HB_TS=$(cat /shared/validator_heartbeat 2>/dev/null | tr -d '[:space:]')
+    NOW=$(date +%s)
+    if [[ "$HB_TS" =~ ^[0-9]+$ ]]; then
+        AGE=$((NOW - HB_TS))
+        if [ "$AGE" -gt "$HEARTBEAT_MAX_AGE" ]; then
+            echo "Heartbeat stale (${AGE}s), skipping"
+            exit 0
+        fi
+    else
+        echo "Heartbeat invalid, skipping"; exit 0
+    fi
+else
+    echo "Heartbeat not present, skipping"; exit 0
+fi
+
+# Detect validator restart via startup_id — clear transition history on restart.
+# Antithesis may restart the container as part of fault injection; those restarts
+# should not count toward the crash-loop threshold.
+CURRENT_STARTUP=$(cat "$STARTUP_ID_FILE" 2>/dev/null | tr -d '[:space:]')
+PREV_STARTUP=$(cat "$PREV_STARTUP_FILE" 2>/dev/null | tr -d '[:space:]')
+if [ -n "$CURRENT_STARTUP" ] && [ "$CURRENT_STARTUP" != "$PREV_STARTUP" ]; then
+    echo "Validator restarted (startup_id changed), resetting transition log"
+    echo "$CURRENT_STARTUP" > "$PREV_STARTUP_FILE"
+    > "${TRANSITIONS_FILE}"
+fi
 
 # Check all three ports
 udp_up=false

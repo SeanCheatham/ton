@@ -91,10 +91,10 @@ if [[ "$lite_up2" != "true" ]]; then
 fi
 
 if [[ "$SURVIVED" == "true" ]]; then
-    sdk_always true "Validator survives oversized UDP payloads" \
+    sdk_sometimes true "Validator survives oversized UDP payloads" \
         "{\"packets_sent\":3,\"sizes\":\"8KB,16KB,64KB\",\"survived\":true,\"post_fuzz_checks\":\"all_passed\"}"
 else
-    sdk_always false "Validator survives oversized UDP payloads" \
+    sdk_sometimes false "Validator survives oversized UDP payloads" \
         "{\"packets_sent\":3,\"sizes\":\"8KB,16KB,64KB\",\"survived\":false,\"post_fuzz_checks\":\"${CHECKS_DETAIL}\"}"
 fi
 

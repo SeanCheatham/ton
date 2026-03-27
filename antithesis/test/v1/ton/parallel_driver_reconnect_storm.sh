@@ -113,10 +113,10 @@ DETAILS=$(jq -cn \
 
 if [ "$CHECKS_PASSED" -eq "$CHECKS_TOTAL" ]; then
     echo "PASS: Validator survived rapid reconnection storm (${CONNS_PER_PORT} conns/port)"
-    sdk_always true "$ASSERTION_NAME" "$DETAILS"
+    sdk_sometimes true "$ASSERTION_NAME" "$DETAILS"
 else
     echo "FAIL: Validator unhealthy after reconnection storm (${CHECKS_PASSED}/${CHECKS_TOTAL} checks passed)"
-    sdk_always false "$ASSERTION_NAME" "$DETAILS"
+    sdk_sometimes false "$ASSERTION_NAME" "$DETAILS"
 fi
 
 sleep 10

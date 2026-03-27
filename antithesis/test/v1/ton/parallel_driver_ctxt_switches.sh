@@ -14,6 +14,24 @@ PROPERTY="Validator context switch rate is bounded when healthy"
 STATE_FILE="/shared/_prev_ctxt_switches"
 MAX_NONVOL_DELTA=50000
 
+# Heartbeat precondition: validator process must be alive
+HEARTBEAT_MAX_AGE=90
+if [ -f /shared/validator_heartbeat ]; then
+    HB_TS=$(cat /shared/validator_heartbeat 2>/dev/null | tr -d '[:space:]')
+    NOW=$(date +%s)
+    if [[ "$HB_TS" =~ ^[0-9]+$ ]]; then
+        AGE=$((NOW - HB_TS))
+        if [ "$AGE" -gt "$HEARTBEAT_MAX_AGE" ]; then
+            echo "Heartbeat stale (${AGE}s), skipping"
+            exit 0
+        fi
+    else
+        echo "Heartbeat invalid, skipping"; exit 0
+    fi
+else
+    echo "Heartbeat not present, skipping"; exit 0
+fi
+
 # Check if validator is healthy
 udp_up=false; console_up=false; lite_up=false
 nc -z -w 1 -u "$VALIDATOR_HOST" 30001 2>/dev/null && udp_up=true
