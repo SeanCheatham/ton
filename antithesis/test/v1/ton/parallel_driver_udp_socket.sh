@@ -5,7 +5,8 @@ PROPERTY="Validator UDP socket is bound when healthy"
 # Heartbeat-only precondition
 HEARTBEAT_MAX_AGE=90
 if [ -f /shared/validator_heartbeat ]; then
-    HB_TS=$(cat /shared/validator_heartbeat 2>/dev/null | tr -d '[:space:]')
+    HB_TS=$(cat /shared/validator_heartbeat 2>/dev/null || true)
+    HB_TS=$(echo "$HB_TS" | tr -d '[:space:]')
     NOW=$(date +%s)
     if [[ "$HB_TS" =~ ^[0-9]+$ ]]; then
         AGE=$((NOW - HB_TS))
@@ -20,7 +21,8 @@ else
     echo "Heartbeat file not present yet, skipping"; exit 0
 fi
 
-UDP_BOUND=$(cat /shared/validator_udp_bound 2>/dev/null | tr -d '[:space:]')
+UDP_BOUND=$(cat /shared/validator_udp_bound 2>/dev/null || true)
+UDP_BOUND=$(echo "$UDP_BOUND" | tr -d '[:space:]')
 
 # If the metric file is missing, empty, or still at init value, try direct check
 if [[ -z "$UDP_BOUND" || "$UDP_BOUND" == "-1" ]]; then

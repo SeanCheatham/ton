@@ -42,7 +42,8 @@ if [ ! -f /shared/validator_deleted_fds ]; then
     exit 0
 fi
 
-DELETED_FDS=$(cat /shared/validator_deleted_fds 2>/dev/null | tr -d '[:space:]')
+DELETED_FDS=$(cat /shared/validator_deleted_fds 2>/dev/null || true)
+DELETED_FDS=$(echo "$DELETED_FDS" | tr -d '[:space:]')
 
 if [ -z "$DELETED_FDS" ] || ! [[ "$DELETED_FDS" =~ ^[0-9]+$ ]]; then
     echo "Invalid deleted FD count value: '$DELETED_FDS', skipping"

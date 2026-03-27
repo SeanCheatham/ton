@@ -19,7 +19,8 @@ echo "Checking RocksDB temporary files..."
 
 # Use heartbeat-only precondition instead of all-3-ports.
 if [ -f /shared/validator_heartbeat ]; then
-    HB=$(cat /shared/validator_heartbeat 2>/dev/null | tr -d '[:space:]')
+    HB=$(cat /shared/validator_heartbeat 2>/dev/null || true)
+    HB=$(echo "$HB" | tr -d '[:space:]')
     NOW=$(date +%s)
     if [[ "$HB" =~ ^[0-9]+$ ]]; then
         AGE=$((NOW - HB))
@@ -43,7 +44,8 @@ if [ ! -f /shared/validator_rocksdb_tmp_files ]; then
     exit 0
 fi
 
-TMP_COUNT=$(cat /shared/validator_rocksdb_tmp_files 2>/dev/null | tr -d '[:space:]')
+TMP_COUNT=$(cat /shared/validator_rocksdb_tmp_files 2>/dev/null || true)
+TMP_COUNT=$(echo "$TMP_COUNT" | tr -d '[:space:]')
 
 # Validate numeric value
 if [ -z "$TMP_COUNT" ] || ! [[ "$TMP_COUNT" =~ ^[0-9]+$ ]]; then

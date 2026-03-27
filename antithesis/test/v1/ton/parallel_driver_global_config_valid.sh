@@ -41,7 +41,8 @@ if [ ! -f /shared/validator_global_config_valid ]; then
     exit 0
 fi
 
-GLOBAL_CONFIG_VALID=$(cat /shared/validator_global_config_valid 2>/dev/null | tr -d '[:space:]')
+GLOBAL_CONFIG_VALID=$(cat /shared/validator_global_config_valid 2>/dev/null || true)
+GLOBAL_CONFIG_VALID=$(echo "$GLOBAL_CONFIG_VALID" | tr -d '[:space:]')
 
 # -1 means ton-global.config doesn't exist yet, skip
 if [ -z "$GLOBAL_CONFIG_VALID" ] || [ "$GLOBAL_CONFIG_VALID" = "-1" ]; then

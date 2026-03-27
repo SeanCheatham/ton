@@ -36,7 +36,8 @@ if [ ! -f /shared/validator_current_manifest_consistent ]; then
     exit 0
 fi
 
-CONSISTENT=$(cat /shared/validator_current_manifest_consistent 2>/dev/null | tr -d '[:space:]')
+CONSISTENT=$(cat /shared/validator_current_manifest_consistent 2>/dev/null || true)
+CONSISTENT=$(echo "$CONSISTENT" | tr -d '[:space:]')
 
 if [ -z "$CONSISTENT" ]; then
     echo "Empty consistency value, skipping"

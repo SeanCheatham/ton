@@ -18,7 +18,8 @@ HEARTBEAT_MAX_AGE=60
 
 # Precondition: heartbeat must be fresh
 if [ -f /shared/validator_heartbeat ]; then
-    HB_TS=$(cat /shared/validator_heartbeat 2>/dev/null | tr -d '[:space:]')
+    HB_TS=$(cat /shared/validator_heartbeat 2>/dev/null || true)
+    HB_TS=$(echo "$HB_TS" | tr -d '[:space:]')
     NOW=$(date +%s)
     if [[ "$HB_TS" =~ ^[0-9]+$ ]]; then
         AGE=$((NOW - HB_TS))
@@ -44,8 +45,10 @@ nc -z -w 2 -u "${VALIDATOR_HOST}" 30001 2>/dev/null && udp_up=1
 
 # Also cross-check with validator-written metric files (written from inside
 # the validator container where /proc/net/tcp IS the validator's)
-TCP_BOUND=$(cat /shared/validator_tcp_bound 2>/dev/null | tr -d '[:space:]')
-UDP_BOUND=$(cat /shared/validator_udp_bound 2>/dev/null | tr -d '[:space:]')
+TCP_BOUND=$(cat /shared/validator_tcp_bound 2>/dev/null || true)
+TCP_BOUND=$(echo "$TCP_BOUND" | tr -d '[:space:]')
+UDP_BOUND=$(cat /shared/validator_udp_bound 2>/dev/null || true)
+UDP_BOUND=$(echo "$UDP_BOUND" | tr -d '[:space:]')
 
 # Use nc probe as primary signal; metric files as supplementary
 LISTEN_COUNT=$((console_up + lite_up + udp_up))

@@ -42,7 +42,8 @@ if [ ! -f /shared/validator_disk_usage ]; then
     exit 0
 fi
 
-DISK_USAGE=$(cat /shared/validator_disk_usage 2>/dev/null | tr -d '[:space:]')
+DISK_USAGE=$(cat /shared/validator_disk_usage 2>/dev/null || true)
+DISK_USAGE=$(echo "$DISK_USAGE" | tr -d '[:space:]')
 
 # Validate we got a numeric value
 if [ -z "$DISK_USAGE" ] || ! [[ "$DISK_USAGE" =~ ^-?[0-9]+$ ]]; then

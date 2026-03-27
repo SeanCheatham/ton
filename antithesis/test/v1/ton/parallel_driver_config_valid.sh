@@ -42,7 +42,8 @@ if [ ! -f /shared/validator_config_valid ]; then
     exit 0
 fi
 
-CONFIG_VALID=$(cat /shared/validator_config_valid 2>/dev/null | tr -d '[:space:]')
+CONFIG_VALID=$(cat /shared/validator_config_valid 2>/dev/null || true)
+CONFIG_VALID=$(echo "$CONFIG_VALID" | tr -d '[:space:]')
 
 # -1 means config.json doesn't exist yet, skip
 if [ -z "$CONFIG_VALID" ] || [ "$CONFIG_VALID" = "-1" ]; then

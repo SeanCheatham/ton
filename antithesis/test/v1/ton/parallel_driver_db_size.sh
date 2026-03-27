@@ -52,7 +52,8 @@ if [ ! -f "${DB_SIZE_FILE}" ]; then
     exit 0
 fi
 
-current_size=$(cat "${DB_SIZE_FILE}" 2>/dev/null | tr -d '[:space:]')
+current_size=$(cat "${DB_SIZE_FILE}" 2>/dev/null || true)
+current_size=$(echo "$current_size" | tr -d '[:space:]')
 
 if [ -z "${current_size}" ] || ! [[ "${current_size}" =~ ^[0-9]+$ ]]; then
     echo "FAIL: DB size file contains invalid data: '${current_size}'"

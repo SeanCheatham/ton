@@ -19,7 +19,8 @@ echo "Checking validator OOM score..."
 # is actively running and metrics are valid, regardless of port status.
 HEARTBEAT_MAX_AGE=90
 if [ -f /shared/validator_heartbeat ]; then
-    HB_TS=$(cat /shared/validator_heartbeat 2>/dev/null | tr -d '[:space:]')
+    HB_TS=$(cat /shared/validator_heartbeat 2>/dev/null || true)
+    HB_TS=$(echo "$HB_TS" | tr -d '[:space:]')
     NOW=$(date +%s)
     if [[ "$HB_TS" =~ ^[0-9]+$ ]]; then
         AGE=$((NOW - HB_TS))
@@ -41,7 +42,8 @@ if [ ! -f /shared/validator_oom_score ]; then
     exit 0
 fi
 
-OOM_SCORE=$(cat /shared/validator_oom_score 2>/dev/null | tr -d '[:space:]')
+OOM_SCORE=$(cat /shared/validator_oom_score 2>/dev/null || true)
+OOM_SCORE=$(echo "$OOM_SCORE" | tr -d '[:space:]')
 
 if [ -z "$OOM_SCORE" ] || ! [[ "$OOM_SCORE" =~ ^-?[0-9]+$ ]]; then
     echo "Invalid OOM score value: '$OOM_SCORE', skipping"

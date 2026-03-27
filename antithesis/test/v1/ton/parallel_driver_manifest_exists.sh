@@ -41,7 +41,8 @@ if [ ! -f /shared/validator_manifest_count ]; then
     exit 0
 fi
 
-MANIFEST_COUNT=$(cat /shared/validator_manifest_count 2>/dev/null | tr -d '[:space:]')
+MANIFEST_COUNT=$(cat /shared/validator_manifest_count 2>/dev/null || true)
+MANIFEST_COUNT=$(echo "$MANIFEST_COUNT" | tr -d '[:space:]')
 
 # Validate we got a numeric value
 if [ -z "$MANIFEST_COUNT" ] || ! [[ "$MANIFEST_COUNT" =~ ^[0-9]+$ ]]; then

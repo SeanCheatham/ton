@@ -43,7 +43,8 @@ if [ ! -f /shared/validator_db_lock ]; then
     exit 0
 fi
 
-LOCK_PRESENT=$(cat /shared/validator_db_lock 2>/dev/null | tr -d '[:space:]')
+LOCK_PRESENT=$(cat /shared/validator_db_lock 2>/dev/null || true)
+LOCK_PRESENT=$(echo "$LOCK_PRESENT" | tr -d '[:space:]')
 
 if [ -z "$LOCK_PRESENT" ] || ! [[ "$LOCK_PRESENT" =~ ^[01]$ ]]; then
     echo "Invalid LOCK status value: '$LOCK_PRESENT', skipping"

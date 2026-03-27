@@ -21,7 +21,8 @@ echo "Testing partial ADNL handshake resilience..."
 # Precondition: heartbeat fresh
 HEARTBEAT_MAX_AGE=60
 if [ -f /shared/validator_heartbeat ]; then
-    HB_TS=$(cat /shared/validator_heartbeat 2>/dev/null | tr -d '[:space:]')
+    HB_TS=$(cat /shared/validator_heartbeat 2>/dev/null || true)
+    HB_TS=$(echo "$HB_TS" | tr -d '[:space:]')
     NOW=$(date +%s)
     if [[ "$HB_TS" =~ ^[0-9]+$ ]]; then
         AGE=$((NOW - HB_TS))
@@ -45,7 +46,8 @@ fi
 # Record pre-attack FD count for comparison
 PRE_FD=""
 if [ -f /shared/validator_fd_count ]; then
-    PRE_FD=$(cat /shared/validator_fd_count 2>/dev/null | tr -d '[:space:]')
+    PRE_FD=$(cat /shared/validator_fd_count 2>/dev/null || true)
+    PRE_FD=$(echo "$PRE_FD" | tr -d '[:space:]')
 fi
 
 # Generate 32 bytes of partial ADNL handshake data.
@@ -88,7 +90,8 @@ for attempt in 1 2 3 4 5; do
 
     # Check heartbeat freshness
     if [ -f /shared/validator_heartbeat ]; then
-        HB_TS=$(cat /shared/validator_heartbeat 2>/dev/null | tr -d '[:space:]')
+        HB_TS=$(cat /shared/validator_heartbeat 2>/dev/null || true)
+        HB_TS=$(echo "$HB_TS" | tr -d '[:space:]')
         NOW=$(date +%s)
         if [[ "$HB_TS" =~ ^[0-9]+$ ]]; then
             AGE=$((NOW - HB_TS))
@@ -112,7 +115,8 @@ done
 # Build details
 POST_FD=""
 if [ -f /shared/validator_fd_count ]; then
-    POST_FD=$(cat /shared/validator_fd_count 2>/dev/null | tr -d '[:space:]')
+    POST_FD=$(cat /shared/validator_fd_count 2>/dev/null || true)
+    POST_FD=$(echo "$POST_FD" | tr -d '[:space:]')
 fi
 
 DETAILS=$(jq -cn \

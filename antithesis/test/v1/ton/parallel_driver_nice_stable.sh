@@ -15,7 +15,8 @@ echo "Checking preconditions for nice value stability..."
 
 # Precondition: heartbeat must be fresh
 if [ -f /shared/validator_heartbeat ]; then
-    HB_TS=$(cat /shared/validator_heartbeat 2>/dev/null | tr -d '[:space:]')
+    HB_TS=$(cat /shared/validator_heartbeat 2>/dev/null || true)
+    HB_TS=$(echo "$HB_TS" | tr -d '[:space:]')
     NOW=$(date +%s)
     if [[ "$HB_TS" =~ ^[0-9]+$ ]]; then
         AGE=$((NOW - HB_TS))
@@ -42,7 +43,8 @@ if [ ! -f /shared/validator_nice ]; then
     exit 0
 fi
 
-NICE_VAL=$(cat /shared/validator_nice 2>/dev/null | tr -d '[:space:]')
+NICE_VAL=$(cat /shared/validator_nice 2>/dev/null || true)
+NICE_VAL=$(echo "$NICE_VAL" | tr -d '[:space:]')
 if [ -z "$NICE_VAL" ] || [ "$NICE_VAL" = "unknown" ] || [ "$NICE_VAL" = "-1" ]; then
     echo "Nice value not ready ($NICE_VAL), skipping"
     sdk_always true "$ASSERTION_NAME" '{"status":"skipped","reason":"nice_not_ready"}'
@@ -57,7 +59,8 @@ if [ ! -f /shared/validator_nice_initial ]; then
     exit 0
 fi
 
-INITIAL_NICE=$(cat /shared/validator_nice_initial 2>/dev/null | tr -d '[:space:]')
+INITIAL_NICE=$(cat /shared/validator_nice_initial 2>/dev/null || true)
+INITIAL_NICE=$(echo "$INITIAL_NICE" | tr -d '[:space:]')
 
 if [ "$NICE_VAL" = "$INITIAL_NICE" ]; then
     DETAILS=$(jq -cn \

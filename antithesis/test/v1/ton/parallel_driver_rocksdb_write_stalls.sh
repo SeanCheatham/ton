@@ -16,7 +16,8 @@ if [[ ! -f "$HEARTBEAT_FILE" ]]; then
     echo "No heartbeat file yet, skipping"
     exit 0
 fi
-HB_TS=$(cat "$HEARTBEAT_FILE" 2>/dev/null | tr -d '[:space:]')
+HB_TS=$(cat "$HEARTBEAT_FILE" 2>/dev/null || true)
+HB_TS=$(echo "$HB_TS" | tr -d '[:space:]')
 NOW=$(date +%s)
 if ! [[ "$HB_TS" =~ ^[0-9]+$ ]]; then
     echo "Invalid heartbeat, skipping"
@@ -40,7 +41,8 @@ if [[ ! -f "$STALL_FILE" ]]; then
     exit 0
 fi
 
-STALL_COUNT=$(cat "$STALL_FILE" 2>/dev/null | tr -d '[:space:]')
+STALL_COUNT=$(cat "$STALL_FILE" 2>/dev/null || true)
+STALL_COUNT=$(echo "$STALL_COUNT" | tr -d '[:space:]')
 if ! [[ "$STALL_COUNT" =~ ^[0-9]+$ ]]; then
     echo "Invalid stall count, skipping"
     exit 0

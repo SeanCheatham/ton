@@ -18,7 +18,8 @@ if [[ ! -f "$HEARTBEAT_FILE" ]]; then
     echo "No heartbeat file yet, skipping"
     exit 0
 fi
-HB_TS=$(cat "$HEARTBEAT_FILE" 2>/dev/null | tr -d '[:space:]')
+HB_TS=$(cat "$HEARTBEAT_FILE" 2>/dev/null || true)
+HB_TS=$(echo "$HB_TS" | tr -d '[:space:]')
 NOW=$(date +%s)
 if ! [[ "$HB_TS" =~ ^[0-9]+$ ]]; then exit 0; fi
 AGE=$((NOW - HB_TS))

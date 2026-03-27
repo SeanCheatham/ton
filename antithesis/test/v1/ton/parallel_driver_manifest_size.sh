@@ -16,7 +16,8 @@ BOUND=52428800  # 50MB in bytes
 
 # Use heartbeat-only precondition
 if [ -f /shared/validator_heartbeat ]; then
-    HB_TS=$(cat /shared/validator_heartbeat 2>/dev/null | tr -d '[:space:]')
+    HB_TS=$(cat /shared/validator_heartbeat 2>/dev/null || true)
+    HB_TS=$(echo "$HB_TS" | tr -d '[:space:]')
     NOW=$(date +%s)
     if [[ "$HB_TS" =~ ^[0-9]+$ ]]; then
         AGE=$((NOW - HB_TS))
@@ -38,7 +39,8 @@ if [ ! -f /shared/validator_manifest_size ]; then
     exit 0
 fi
 
-MANIFEST_SIZE=$(cat /shared/validator_manifest_size 2>/dev/null | tr -d '[:space:]')
+MANIFEST_SIZE=$(cat /shared/validator_manifest_size 2>/dev/null || true)
+MANIFEST_SIZE=$(echo "$MANIFEST_SIZE" | tr -d '[:space:]')
 
 if [ -z "$MANIFEST_SIZE" ] || ! [[ "$MANIFEST_SIZE" =~ ^[0-9]+$ ]]; then
     echo "Invalid MANIFEST size value: '$MANIFEST_SIZE', skipping"

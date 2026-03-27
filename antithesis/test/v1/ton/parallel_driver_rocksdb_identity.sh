@@ -32,7 +32,8 @@ if [[ ! -f "$HEARTBEAT_FILE" ]]; then
     exit 0
 fi
 
-hb_ts=$(cat "$HEARTBEAT_FILE" 2>/dev/null | tr -d '[:space:]')
+hb_ts=$(cat "$HEARTBEAT_FILE" 2>/dev/null || true)
+hb_ts=$(echo "$hb_ts" | tr -d '[:space:]')
 now=$(date +%s)
 if [[ -z "$hb_ts" ]] || ! [[ "$hb_ts" =~ ^[0-9]+$ ]]; then
     echo "SKIP: heartbeat value invalid"
@@ -50,7 +51,8 @@ if [[ ! -f "$IDENTITY_FILE" ]]; then
     exit 0
 fi
 
-current_identity=$(cat "$IDENTITY_FILE" 2>/dev/null | tr -d '[:space:]')
+current_identity=$(cat "$IDENTITY_FILE" 2>/dev/null || true)
+current_identity=$(echo "$current_identity" | tr -d '[:space:]')
 if [[ -z "$current_identity" ]] || [[ "$current_identity" == "unknown" ]]; then
     echo "SKIP: RocksDB identity not yet available"
     exit 0
@@ -85,7 +87,8 @@ if [[ ! -f "$FIRST_FILE" ]]; then
 fi
 
 # Step 5: Compare with first observation
-first_identity=$(cat "$FIRST_FILE" 2>/dev/null | tr -d '[:space:]')
+first_identity=$(cat "$FIRST_FILE" 2>/dev/null || true)
+first_identity=$(echo "$first_identity" | tr -d '[:space:]')
 if [[ -z "$first_identity" ]]; then
     echo "  First identity file is empty, resetting"
     echo "$current_identity" > "$FIRST_FILE"

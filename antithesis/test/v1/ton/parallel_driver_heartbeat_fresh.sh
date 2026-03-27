@@ -56,7 +56,8 @@ fi
 echo "TCP reachable: ${tcp_reachable}, checking heartbeat..."
 
 # Step 3: Read heartbeat timestamp and compare to current time
-heartbeat_ts=$(cat "${HEARTBEAT_FILE}" 2>/dev/null | tr -d '[:space:]')
+heartbeat_ts=$(cat "${HEARTBEAT_FILE}" 2>/dev/null || true)
+heartbeat_ts=$(echo "$heartbeat_ts" | tr -d '[:space:]')
 now_ts=$(date +%s)
 
 if [ -z "${heartbeat_ts}" ] || ! [[ "${heartbeat_ts}" =~ ^[0-9]+$ ]]; then

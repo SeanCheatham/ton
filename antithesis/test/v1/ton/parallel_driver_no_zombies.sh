@@ -28,7 +28,8 @@ lite_up=false
 # Heartbeat precondition: validator process must be alive
 HEARTBEAT_MAX_AGE=90
 if [ -f /shared/validator_heartbeat ]; then
-    HB_TS=$(cat /shared/validator_heartbeat 2>/dev/null | tr -d '[:space:]')
+    HB_TS=$(cat /shared/validator_heartbeat 2>/dev/null || true)
+    HB_TS=$(echo "$HB_TS" | tr -d '[:space:]')
     NOW=$(date +%s)
     if [[ "$HB_TS" =~ ^[0-9]+$ ]]; then
         AGE=$((NOW - HB_TS))
@@ -60,7 +61,8 @@ if [ ! -f /shared/validator_zombie_count ]; then
     exit 0
 fi
 
-ZOMBIE_COUNT=$(cat /shared/validator_zombie_count 2>/dev/null | tr -d '[:space:]')
+ZOMBIE_COUNT=$(cat /shared/validator_zombie_count 2>/dev/null || true)
+ZOMBIE_COUNT=$(echo "$ZOMBIE_COUNT" | tr -d '[:space:]')
 
 if [ -z "$ZOMBIE_COUNT" ] || ! [[ "$ZOMBIE_COUNT" =~ ^[0-9]+$ ]]; then
     echo "Invalid zombie count value: '$ZOMBIE_COUNT', skipping"

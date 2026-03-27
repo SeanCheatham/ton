@@ -14,7 +14,8 @@ RATIO_THRESHOLD=10
 
 # Heartbeat precondition
 if [ -f /shared/validator_heartbeat ]; then
-    HB_TS=$(cat /shared/validator_heartbeat 2>/dev/null | tr -d '[:space:]')
+    HB_TS=$(cat /shared/validator_heartbeat 2>/dev/null || true)
+    HB_TS=$(echo "$HB_TS" | tr -d '[:space:]')
     NOW=$(date +%s)
     if [[ "$HB_TS" =~ ^[0-9]+$ ]]; then
         AGE=$((NOW - HB_TS))
@@ -35,8 +36,10 @@ else
 fi
 
 # Read RSS and VmSize
-RSS_KB=$(cat /shared/validator_mem_rss 2>/dev/null | tr -d '[:space:]')
-VMSIZE_KB=$(cat /shared/validator_vmsize 2>/dev/null | tr -d '[:space:]')
+RSS_KB=$(cat /shared/validator_mem_rss 2>/dev/null || true)
+RSS_KB=$(echo "$RSS_KB" | tr -d '[:space:]')
+VMSIZE_KB=$(cat /shared/validator_vmsize 2>/dev/null || true)
+VMSIZE_KB=$(echo "$VMSIZE_KB" | tr -d '[:space:]')
 
 # Skip if not yet populated
 if [ -z "$RSS_KB" ] || [ "$RSS_KB" = "-1" ] || ! [[ "$RSS_KB" =~ ^[0-9]+$ ]] || [ "$RSS_KB" -le 0 ]; then

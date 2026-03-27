@@ -31,7 +31,8 @@ if [[ ! -f "$HEARTBEAT_FILE" ]]; then
     exit 0
 fi
 
-hb_ts=$(cat "$HEARTBEAT_FILE" 2>/dev/null | tr -d '[:space:]')
+hb_ts=$(cat "$HEARTBEAT_FILE" 2>/dev/null || true)
+hb_ts=$(echo "$hb_ts" | tr -d '[:space:]')
 now=$(date +%s)
 if [[ -z "$hb_ts" ]] || ! [[ "$hb_ts" =~ ^[0-9]+$ ]]; then
     echo "SKIP: heartbeat value invalid"
@@ -50,7 +51,8 @@ if [[ ! -f "$HASH_FILE" ]]; then
     exit 0
 fi
 
-current_hash=$(cat "$HASH_FILE" 2>/dev/null | tr -d '[:space:]')
+current_hash=$(cat "$HASH_FILE" 2>/dev/null || true)
+current_hash=$(echo "$current_hash" | tr -d '[:space:]')
 if [[ -z "$current_hash" ]]; then
     echo "SKIP: cmdline hash file is empty"
     exit 0
@@ -68,7 +70,8 @@ if [[ ! -f "$FIRST_FILE" ]]; then
 fi
 
 # Step 5: Compare with first observation
-first_hash=$(cat "$FIRST_FILE" 2>/dev/null | tr -d '[:space:]')
+first_hash=$(cat "$FIRST_FILE" 2>/dev/null || true)
+first_hash=$(echo "$first_hash" | tr -d '[:space:]')
 if [[ -z "$first_hash" ]]; then
     echo "  First hash file is empty, resetting"
     echo "$current_hash" > "$FIRST_FILE"

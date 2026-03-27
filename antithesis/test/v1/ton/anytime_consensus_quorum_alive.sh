@@ -33,7 +33,8 @@ for IDX in 1 2 3; do
         FILE_MTIME=$(stat -c %Y "${HB_FILE}" 2>/dev/null || echo 0)
         FILE_AGE=$(( NOW - FILE_MTIME ))
         if [ "${FILE_AGE}" -le "${MAX_AGE}" ]; then
-            HB_TS=$(cat "${HB_FILE}" 2>/dev/null | tr -d '[:space:]')
+            HB_TS=$(cat "${HB_FILE}" 2>/dev/null || true)
+            HB_TS=$(echo "$HB_TS" | tr -d '[:space:]')
             if [[ "${HB_TS}" =~ ^[0-9]+$ ]]; then
                 HB_AGE=$(( NOW - HB_TS ))
                 if [ "${HB_AGE}" -le "${MAX_AGE}" ]; then

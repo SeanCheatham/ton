@@ -12,7 +12,8 @@ HEARTBEAT_MAX_AGE=60
 
 # Precondition: heartbeat must be fresh
 if [ -f /shared/validator_heartbeat ]; then
-    HB_TS=$(cat /shared/validator_heartbeat 2>/dev/null | tr -d '[:space:]')
+    HB_TS=$(cat /shared/validator_heartbeat 2>/dev/null || true)
+    HB_TS=$(echo "$HB_TS" | tr -d '[:space:]')
     NOW=$(date +%s)
     if [[ "$HB_TS" =~ ^[0-9]+$ ]]; then
         AGE=$((NOW - HB_TS))
@@ -33,7 +34,8 @@ if [ ! -f /shared/validator_pid1_comm ]; then
     exit 0
 fi
 
-PID1_COMM=$(cat /shared/validator_pid1_comm 2>/dev/null | tr -d '[:space:]')
+PID1_COMM=$(cat /shared/validator_pid1_comm 2>/dev/null || true)
+PID1_COMM=$(echo "$PID1_COMM" | tr -d '[:space:]')
 
 if [ -z "$PID1_COMM" ]; then
     echo "PID1 comm is empty, skipping"

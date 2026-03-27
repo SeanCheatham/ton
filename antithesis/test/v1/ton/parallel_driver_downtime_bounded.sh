@@ -59,7 +59,8 @@ else
         exit 0
     fi
 
-    last_up_ts=$(cat "${LAST_UP_FILE}" 2>/dev/null | tr -d '[:space:]')
+    last_up_ts=$(cat "${LAST_UP_FILE}" 2>/dev/null || true)
+    last_up_ts=$(echo "$last_up_ts" | tr -d '[:space:]')
 
     if [ -z "${last_up_ts}" ] || ! [[ "${last_up_ts}" =~ ^[0-9]+$ ]]; then
         # Invalid data in file — reset and skip

@@ -12,7 +12,8 @@ HEARTBEAT_MAX_AGE=60
 
 # Precondition: heartbeat must be fresh
 if [ -f /shared/validator_heartbeat ]; then
-    HB_TS=$(cat /shared/validator_heartbeat 2>/dev/null | tr -d '[:space:]')
+    HB_TS=$(cat /shared/validator_heartbeat 2>/dev/null || true)
+    HB_TS=$(echo "$HB_TS" | tr -d '[:space:]')
     NOW=$(date +%s)
     if [[ "$HB_TS" =~ ^[0-9]+$ ]]; then
         AGE=$((NOW - HB_TS))
@@ -33,7 +34,8 @@ else
 fi
 
 # Read first config hash
-HASH1=$(cat /shared/validator_config_hash 2>/dev/null | tr -d '[:space:]')
+HASH1=$(cat /shared/validator_config_hash 2>/dev/null || true)
+HASH1=$(echo "$HASH1" | tr -d '[:space:]')
 if [ -z "$HASH1" ] || [ "$HASH1" = "unavailable" ]; then
     echo "Config hash not available yet, skipping"
     sdk_always true "$ASSERTION_NAME" '{"status":"metric_not_available"}'
@@ -44,7 +46,8 @@ echo "First config hash: ${HASH1}"
 sleep 10
 
 # Read second config hash
-HASH2=$(cat /shared/validator_config_hash 2>/dev/null | tr -d '[:space:]')
+HASH2=$(cat /shared/validator_config_hash 2>/dev/null || true)
+HASH2=$(echo "$HASH2" | tr -d '[:space:]')
 if [ -z "$HASH2" ] || [ "$HASH2" = "unavailable" ]; then
     echo "Config hash became unavailable during wait, skipping"
     sdk_always true "$ASSERTION_NAME" '{"status":"metric_became_unavailable"}'

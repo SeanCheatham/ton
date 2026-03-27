@@ -19,7 +19,8 @@ echo "Checking validator file descriptor types..."
 # is actively running and metrics are valid, regardless of port status.
 HEARTBEAT_MAX_AGE=90
 if [ -f /shared/validator_heartbeat ]; then
-    HB_TS=$(cat /shared/validator_heartbeat 2>/dev/null | tr -d '[:space:]')
+    HB_TS=$(cat /shared/validator_heartbeat 2>/dev/null || true)
+    HB_TS=$(echo "$HB_TS" | tr -d '[:space:]')
     NOW=$(date +%s)
     if [[ "$HB_TS" =~ ^[0-9]+$ ]]; then
         AGE=$((NOW - HB_TS))
@@ -41,7 +42,8 @@ if [ ! -f /shared/validator_unexpected_fds ]; then
     exit 0
 fi
 
-UNEXPECTED_FDS=$(cat /shared/validator_unexpected_fds 2>/dev/null | tr -d '[:space:]')
+UNEXPECTED_FDS=$(cat /shared/validator_unexpected_fds 2>/dev/null || true)
+UNEXPECTED_FDS=$(echo "$UNEXPECTED_FDS" | tr -d '[:space:]')
 
 if [ -z "$UNEXPECTED_FDS" ] || ! [[ "$UNEXPECTED_FDS" =~ ^[0-9]+$ ]]; then
     echo "Invalid unexpected FDs value: '$UNEXPECTED_FDS', skipping"

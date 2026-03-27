@@ -25,7 +25,8 @@ for attempt in $(seq 1 "$MAX_RETRIES"); do
     # Check 1: Heartbeat file exists and is fresh
     HB_OK=false
     if [ -f /shared/validator_heartbeat ]; then
-        HB_TS=$(cat /shared/validator_heartbeat 2>/dev/null | tr -d '[:space:]')
+        HB_TS=$(cat /shared/validator_heartbeat 2>/dev/null || true)
+        HB_TS=$(echo "$HB_TS" | tr -d '[:space:]')
         NOW=$(date +%s)
         if [[ "$HB_TS" =~ ^[0-9]+$ ]]; then
             AGE=$((NOW - HB_TS))
@@ -71,7 +72,8 @@ for attempt in $(seq 1 "$MAX_RETRIES"); do
 
     # Check 5: Config is valid JSON
     CONFIG_OK=false
-    CONFIG_VAL=$(cat /shared/validator_config_valid 2>/dev/null | tr -d '[:space:]')
+    CONFIG_VAL=$(cat /shared/validator_config_valid 2>/dev/null || true)
+    CONFIG_VAL=$(echo "$CONFIG_VAL" | tr -d '[:space:]')
     if [ "$CONFIG_VAL" = "1" ]; then
         CONFIG_OK=true
     fi
@@ -82,7 +84,8 @@ for attempt in $(seq 1 "$MAX_RETRIES"); do
 
     # Check 6: DB size is > 0
     DB_OK=false
-    DB_SIZE=$(cat /shared/validator_db_size 2>/dev/null | tr -d '[:space:]')
+    DB_SIZE=$(cat /shared/validator_db_size 2>/dev/null || true)
+    DB_SIZE=$(echo "$DB_SIZE" | tr -d '[:space:]')
     if [[ "$DB_SIZE" =~ ^[0-9]+$ ]] && [ "$DB_SIZE" -gt 0 ]; then
         DB_OK=true
     fi
@@ -93,7 +96,8 @@ for attempt in $(seq 1 "$MAX_RETRIES"); do
 
     # Check 7: Keyring has entries
     KEYRING_OK=false
-    KEYRING_COUNT=$(cat /shared/validator_keyring_count 2>/dev/null | tr -d '[:space:]')
+    KEYRING_COUNT=$(cat /shared/validator_keyring_count 2>/dev/null || true)
+    KEYRING_COUNT=$(echo "$KEYRING_COUNT" | tr -d '[:space:]')
     if [[ "$KEYRING_COUNT" =~ ^[0-9]+$ ]] && [ "$KEYRING_COUNT" -gt 0 ]; then
         KEYRING_OK=true
     fi

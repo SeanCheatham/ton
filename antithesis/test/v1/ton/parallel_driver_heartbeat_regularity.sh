@@ -25,7 +25,8 @@ if [[ ! -f "$HEARTBEAT_FILE" ]]; then
     exit 0
 fi
 
-CURRENT_TS=$(cat "$HEARTBEAT_FILE" 2>/dev/null | tr -d '[:space:]')
+CURRENT_TS=$(cat "$HEARTBEAT_FILE" 2>/dev/null || true)
+CURRENT_TS=$(echo "$CURRENT_TS" | tr -d '[:space:]')
 if ! [[ "$CURRENT_TS" =~ ^[0-9]+$ ]]; then
     echo "Invalid heartbeat timestamp, skipping"
     exit 0
@@ -54,7 +55,8 @@ if [[ ! -f "$PREV_FILE" ]]; then
     exit 0
 fi
 
-PREV_TS=$(cat "$PREV_FILE" 2>/dev/null | tr -d '[:space:]')
+PREV_TS=$(cat "$PREV_FILE" 2>/dev/null || true)
+PREV_TS=$(echo "$PREV_TS" | tr -d '[:space:]')
 if ! [[ "$PREV_TS" =~ ^[0-9]+$ ]]; then
     echo "$CURRENT_TS" > "$PREV_FILE"
     echo "$NOW" > "$PREV_WALLCLOCK_FILE"
@@ -66,7 +68,8 @@ fi
 # If too much wall-clock time has elapsed since our last successful check,
 # the validator was likely unhealthy in between (faults, restarts).  We
 # cannot meaningfully assess regularity across that gap, so reset baseline.
-PREV_WALL=$(cat "$PREV_WALLCLOCK_FILE" 2>/dev/null | tr -d '[:space:]')
+PREV_WALL=$(cat "$PREV_WALLCLOCK_FILE" 2>/dev/null || true)
+PREV_WALL=$(echo "$PREV_WALL" | tr -d '[:space:]')
 if ! [[ "$PREV_WALL" =~ ^[0-9]+$ ]]; then
     PREV_WALL=0
 fi

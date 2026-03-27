@@ -26,7 +26,8 @@ NOW=$(date +%s)
 # most recent iteration have been written.
 LOOP_EPOCH_MAX_AGE=3600
 if [ -f /shared/validator_loop_epoch ]; then
-    LOOP_TS=$(cat /shared/validator_loop_epoch 2>/dev/null | tr -d '[:space:]')
+    LOOP_TS=$(cat /shared/validator_loop_epoch 2>/dev/null || true)
+    LOOP_TS=$(echo "$LOOP_TS" | tr -d '[:space:]')
     if [[ "$LOOP_TS" =~ ^[0-9]+$ ]] && [ "$LOOP_TS" -gt 0 ]; then
         LOOP_AGE=$((NOW - LOOP_TS))
         if [ "$LOOP_AGE" -gt "$LOOP_EPOCH_MAX_AGE" ]; then
@@ -45,7 +46,8 @@ fi
 # heartbeat loop has since died (container restarting, etc.).
 HEARTBEAT_MAX_AGE=90
 if [ -f /shared/validator_heartbeat ]; then
-    HB_TS=$(cat /shared/validator_heartbeat 2>/dev/null | tr -d '[:space:]')
+    HB_TS=$(cat /shared/validator_heartbeat 2>/dev/null || true)
+    HB_TS=$(echo "$HB_TS" | tr -d '[:space:]')
     if [[ "$HB_TS" =~ ^[0-9]+$ ]]; then
         AGE=$((NOW - HB_TS))
         if [ "$AGE" -gt "$HEARTBEAT_MAX_AGE" ]; then

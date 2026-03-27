@@ -15,7 +15,8 @@ MIN_NOFILE=1024
 # Heartbeat freshness precondition
 HEARTBEAT_MAX_AGE=90
 if [ -f /shared/validator_heartbeat ]; then
-    HB_TS=$(cat /shared/validator_heartbeat 2>/dev/null | tr -d '[:space:]')
+    HB_TS=$(cat /shared/validator_heartbeat 2>/dev/null || true)
+    HB_TS=$(echo "$HB_TS" | tr -d '[:space:]')
     NOW=$(date +%s)
     if [[ "$HB_TS" =~ ^[0-9]+$ ]]; then
         AGE=$((NOW - HB_TS))
@@ -36,8 +37,10 @@ if [ ! -f /shared/validator_nofile_limit ] || [ ! -f /shared/validator_fd_count 
     sleep 10; exit 0
 fi
 
-NOFILE_LIMIT=$(cat /shared/validator_nofile_limit 2>/dev/null | tr -d '[:space:]')
-FD_COUNT=$(cat /shared/validator_fd_count 2>/dev/null | tr -d '[:space:]')
+NOFILE_LIMIT=$(cat /shared/validator_nofile_limit 2>/dev/null || true)
+NOFILE_LIMIT=$(echo "$NOFILE_LIMIT" | tr -d '[:space:]')
+FD_COUNT=$(cat /shared/validator_fd_count 2>/dev/null || true)
+FD_COUNT=$(echo "$FD_COUNT" | tr -d '[:space:]')
 
 # Skip if values are missing or invalid
 if ! [[ "$NOFILE_LIMIT" =~ ^[0-9]+$ ]] || [ "$NOFILE_LIMIT" = "-1" ]; then

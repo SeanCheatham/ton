@@ -43,7 +43,8 @@ if [ ! -f /shared/validator_sock_count ]; then
     exit 0
 fi
 
-SOCK_COUNT=$(cat /shared/validator_sock_count 2>/dev/null | tr -d '[:space:]')
+SOCK_COUNT=$(cat /shared/validator_sock_count 2>/dev/null || true)
+SOCK_COUNT=$(echo "$SOCK_COUNT" | tr -d '[:space:]')
 
 # Validate we got a numeric value
 if [ -z "$SOCK_COUNT" ] || ! [[ "$SOCK_COUNT" =~ ^-?[0-9]+$ ]]; then

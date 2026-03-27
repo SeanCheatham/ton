@@ -46,7 +46,8 @@ if [[ ! -f "$HEARTBEAT_FILE" ]]; then
     exit 0
 fi
 
-hb_ts=$(cat "$HEARTBEAT_FILE" 2>/dev/null | tr -d '[:space:]')
+hb_ts=$(cat "$HEARTBEAT_FILE" 2>/dev/null || true)
+hb_ts=$(echo "$hb_ts" | tr -d '[:space:]')
 now=$(date +%s)
 if [[ -z "$hb_ts" ]] || ! [[ "$hb_ts" =~ ^[0-9]+$ ]]; then
     echo "SKIP: heartbeat value invalid"
@@ -65,7 +66,8 @@ if [[ ! -f "$DIR_COUNT_FILE" ]]; then
     exit 0
 fi
 
-current_count=$(cat "$DIR_COUNT_FILE" 2>/dev/null | tr -d '[:space:]')
+current_count=$(cat "$DIR_COUNT_FILE" 2>/dev/null || true)
+current_count=$(echo "$current_count" | tr -d '[:space:]')
 if [[ -z "$current_count" ]] || ! [[ "$current_count" =~ ^[0-9]+$ ]]; then
     echo "SKIP: directory count value invalid: '${current_count}'"
     exit 0
@@ -83,7 +85,8 @@ if [[ ! -f "$PREV_FILE" ]]; then
 fi
 
 # Step 5: Compare with previous observation
-prev_count=$(cat "$PREV_FILE" 2>/dev/null | tr -d '[:space:]')
+prev_count=$(cat "$PREV_FILE" 2>/dev/null || true)
+prev_count=$(echo "$prev_count" | tr -d '[:space:]')
 if [[ -z "$prev_count" ]] || ! [[ "$prev_count" =~ ^[0-9]+$ ]]; then
     echo "  Previous count invalid ('${prev_count}'), resetting"
     echo "$current_count" > "$PREV_FILE"

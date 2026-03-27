@@ -18,7 +18,8 @@ LARGE_LOG_KB=10240        # 10MB threshold for rate-based check
 # Heartbeat freshness precondition
 HEARTBEAT_MAX_AGE=90
 if [ -f /shared/validator_heartbeat ]; then
-    HB_TS=$(cat /shared/validator_heartbeat 2>/dev/null | tr -d '[:space:]')
+    HB_TS=$(cat /shared/validator_heartbeat 2>/dev/null || true)
+    HB_TS=$(echo "$HB_TS" | tr -d '[:space:]')
     NOW=$(date +%s)
     if [[ "$HB_TS" =~ ^[0-9]+$ ]]; then
         AGE=$((NOW - HB_TS))
@@ -39,7 +40,8 @@ if [ ! -f /shared/validator_log_error_count ]; then
     sleep 10; exit 0
 fi
 
-RAW=$(cat /shared/validator_log_error_count 2>/dev/null | tr -d '[:space:]')
+RAW=$(cat /shared/validator_log_error_count 2>/dev/null || true)
+RAW=$(echo "$RAW" | tr -d '[:space:]')
 
 # Parse COUNT:SIZE_KB format
 ERROR_COUNT="${RAW%%:*}"

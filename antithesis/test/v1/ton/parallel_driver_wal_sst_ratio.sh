@@ -6,7 +6,8 @@ HEARTBEAT_MAX_AGE=60
 
 # Heartbeat-based precondition
 if [ -f /shared/validator_heartbeat ]; then
-    HB_TS=$(cat /shared/validator_heartbeat 2>/dev/null | tr -d '[:space:]')
+    HB_TS=$(cat /shared/validator_heartbeat 2>/dev/null || true)
+    HB_TS=$(echo "$HB_TS" | tr -d '[:space:]')
     NOW=$(date +%s)
     if [[ "$HB_TS" =~ ^[0-9]+$ ]]; then
         AGE=$((NOW - HB_TS))
@@ -21,8 +22,10 @@ else
     echo "Heartbeat file not present yet, skipping"; exit 0
 fi
 
-WAL_COUNT=$(cat /shared/validator_wal_count 2>/dev/null | tr -d '[:space:]')
-SST_COUNT=$(cat /shared/validator_sst_count 2>/dev/null | tr -d '[:space:]')
+WAL_COUNT=$(cat /shared/validator_wal_count 2>/dev/null || true)
+WAL_COUNT=$(echo "$WAL_COUNT" | tr -d '[:space:]')
+SST_COUNT=$(cat /shared/validator_sst_count 2>/dev/null || true)
+SST_COUNT=$(echo "$SST_COUNT" | tr -d '[:space:]')
 
 # If metrics are not yet populated, emit pass-through (heartbeat is fresh but metrics pending)
 if [[ -z "$WAL_COUNT" || -z "$SST_COUNT" ]]; then

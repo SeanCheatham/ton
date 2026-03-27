@@ -14,7 +14,8 @@ CONCURRENT=3
 
 # Precondition: heartbeat must be fresh
 if [ -f /shared/validator_heartbeat ]; then
-    HB_TS=$(cat /shared/validator_heartbeat 2>/dev/null | tr -d '[:space:]')
+    HB_TS=$(cat /shared/validator_heartbeat 2>/dev/null || true)
+    HB_TS=$(echo "$HB_TS" | tr -d '[:space:]')
     NOW=$(date +%s)
     if [[ "$HB_TS" =~ ^[0-9]+$ ]]; then
         AGE=$((NOW - HB_TS))
@@ -100,7 +101,8 @@ fi
 
 HB_FRESH=false
 if [ -f /shared/validator_heartbeat ]; then
-    HB_TS2=$(cat /shared/validator_heartbeat 2>/dev/null | tr -d '[:space:]')
+    HB_TS2=$(cat /shared/validator_heartbeat 2>/dev/null || true)
+    HB_TS2=$(echo "$HB_TS2" | tr -d '[:space:]')
     NOW2=$(date +%s)
     if [[ "$HB_TS2" =~ ^[0-9]+$ ]]; then
         AGE2=$((NOW2 - HB_TS2))

@@ -41,7 +41,8 @@ if [ ! -f /shared/validator_current_valid ]; then
     exit 0
 fi
 
-CURRENT_VALID=$(cat /shared/validator_current_valid 2>/dev/null | tr -d '[:space:]')
+CURRENT_VALID=$(cat /shared/validator_current_valid 2>/dev/null || true)
+CURRENT_VALID=$(echo "$CURRENT_VALID" | tr -d '[:space:]')
 
 if [ -z "$CURRENT_VALID" ] || ! [[ "$CURRENT_VALID" =~ ^[01]$ ]]; then
     echo "Invalid CURRENT validity value: '$CURRENT_VALID', skipping"

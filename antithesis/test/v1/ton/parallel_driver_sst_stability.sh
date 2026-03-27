@@ -11,7 +11,8 @@ HEARTBEAT_MAX_AGE=60
 
 # Precondition: heartbeat must be fresh
 if [ -f /shared/validator_heartbeat ]; then
-    HB_TS=$(cat /shared/validator_heartbeat 2>/dev/null | tr -d '[:space:]')
+    HB_TS=$(cat /shared/validator_heartbeat 2>/dev/null || true)
+    HB_TS=$(echo "$HB_TS" | tr -d '[:space:]')
     NOW=$(date +%s)
     if [[ "$HB_TS" =~ ^[0-9]+$ ]]; then
         AGE=$((NOW - HB_TS))
@@ -32,7 +33,8 @@ else
 fi
 
 # Read current SST count
-SST_COUNT=$(cat /shared/validator_sst_count 2>/dev/null | tr -d '[:space:]')
+SST_COUNT=$(cat /shared/validator_sst_count 2>/dev/null || true)
+SST_COUNT=$(echo "$SST_COUNT" | tr -d '[:space:]')
 if ! [[ "$SST_COUNT" =~ ^[0-9]+$ ]]; then
     echo "SST count metric not available or invalid, skipping"
     sdk_always true "$ASSERTION_NAME" '{"status":"metric_not_available"}'
@@ -48,7 +50,8 @@ fi
 
 # Read previous value
 PREV_FILE="/shared/_prev_sst_count"
-PREV_COUNT=$(cat "$PREV_FILE" 2>/dev/null | tr -d '[:space:]')
+PREV_COUNT=$(cat "$PREV_FILE" 2>/dev/null || true)
+PREV_COUNT=$(echo "$PREV_COUNT" | tr -d '[:space:]')
 
 # Store current for next invocation
 echo "$SST_COUNT" > "$PREV_FILE"

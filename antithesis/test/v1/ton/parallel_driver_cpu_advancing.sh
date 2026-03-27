@@ -6,7 +6,8 @@ STATE_FILE="/shared/validator_cpu_ticks_prev"
 # Heartbeat-based precondition (matches working scripts like parallel_driver_db_activity.sh)
 HEARTBEAT_MAX_AGE=90
 if [ -f /shared/validator_heartbeat ]; then
-    HB_TS=$(cat /shared/validator_heartbeat 2>/dev/null | tr -d '[:space:]')
+    HB_TS=$(cat /shared/validator_heartbeat 2>/dev/null || true)
+    HB_TS=$(echo "$HB_TS" | tr -d '[:space:]')
     NOW=$(date +%s)
     if [[ "$HB_TS" =~ ^[0-9]+$ ]]; then
         AGE=$((NOW - HB_TS))
@@ -26,14 +27,16 @@ else
     exit 0
 fi
 
-CURRENT=$(cat /shared/validator_cpu_ticks 2>/dev/null | tr -d '[:space:]')
+CURRENT=$(cat /shared/validator_cpu_ticks 2>/dev/null || true)
+CURRENT=$(echo "$CURRENT" | tr -d '[:space:]')
 if [[ -z "$CURRENT" || "$CURRENT" == "-1" ]] || ! [[ "$CURRENT" =~ ^[0-9]+$ ]]; then
     echo "No valid CPU ticks available yet"
     sdk_always true "$PROPERTY" '{"status":"metric_not_available"}'
     exit 0
 fi
 
-PREV=$(cat "$STATE_FILE" 2>/dev/null | tr -d '[:space:]')
+PREV=$(cat "$STATE_FILE" 2>/dev/null || true)
+PREV=$(echo "$PREV" | tr -d '[:space:]')
 echo "$CURRENT" > "$STATE_FILE"
 
 if [[ -z "$PREV" ]] || ! [[ "$PREV" =~ ^[0-9]+$ ]]; then

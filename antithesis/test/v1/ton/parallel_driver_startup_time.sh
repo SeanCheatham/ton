@@ -37,7 +37,8 @@ if [ ! -f /shared/validator_first_heartbeat ]; then
     exit 0
 fi
 
-FIRST_HB=$(cat /shared/validator_first_heartbeat 2>/dev/null | tr -d '[:space:]')
+FIRST_HB=$(cat /shared/validator_first_heartbeat 2>/dev/null || true)
+FIRST_HB=$(echo "$FIRST_HB" | tr -d '[:space:]')
 
 if ! [[ "$FIRST_HB" =~ ^[0-9]+$ ]]; then
     echo "First heartbeat value invalid, skipping"
@@ -47,7 +48,8 @@ fi
 
 # Also verify current heartbeat is fresh (validator is actually running)
 if [ -f /shared/validator_heartbeat ]; then
-    HB_TS=$(cat /shared/validator_heartbeat 2>/dev/null | tr -d '[:space:]')
+    HB_TS=$(cat /shared/validator_heartbeat 2>/dev/null || true)
+    HB_TS=$(echo "$HB_TS" | tr -d '[:space:]')
     NOW=$(date +%s)
     if [[ "$HB_TS" =~ ^[0-9]+$ ]] && [ "$HB_TS" != "-1" ]; then
         HB_AGE=$((NOW - HB_TS))

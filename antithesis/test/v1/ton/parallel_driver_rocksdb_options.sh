@@ -20,7 +20,8 @@ echo "Checking RocksDB OPTIONS file..."
 # Use heartbeat-only precondition instead of all-3-ports.
 # The heartbeat proves the validator process is actively running.
 if [ -f /shared/validator_heartbeat ]; then
-    HB=$(cat /shared/validator_heartbeat 2>/dev/null | tr -d '[:space:]')
+    HB=$(cat /shared/validator_heartbeat 2>/dev/null || true)
+    HB=$(echo "$HB" | tr -d '[:space:]')
     NOW=$(date +%s)
     if [[ "$HB" =~ ^[0-9]+$ ]]; then
         AGE=$((NOW - HB))
@@ -44,7 +45,8 @@ if [ ! -f /shared/validator_rocksdb_options ]; then
     exit 0
 fi
 
-RAW=$(cat /shared/validator_rocksdb_options 2>/dev/null | tr -d '[:space:]')
+RAW=$(cat /shared/validator_rocksdb_options 2>/dev/null || true)
+RAW=$(echo "$RAW" | tr -d '[:space:]')
 
 # Parse COUNT:NONEMPTY format
 OPTIONS_COUNT=$(echo "$RAW" | cut -d: -f1)
