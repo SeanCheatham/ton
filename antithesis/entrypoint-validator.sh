@@ -174,6 +174,32 @@ if [ ! -f "${STATIC_DIR}/.zerostate_generated" ]; then
                 -s gen-zerostate.fif
         )
 
+        # Pre-generate signed transaction BOCs for the workload to send.
+        # The wallet (SmartContract #1) lives at masterchain address -1:000...000.
+        # wallet.fif loads main-wallet.pk and main-wallet.addr from the working dir.
+        WALLET_DEST="-1:0000000000000000000000000000000000000000000000000000000000000000"
+        TX_DIR="/shared/tx"
+        mkdir -p "${TX_DIR}"
+        TX_COUNT=100
+        echo "Generating ${TX_COUNT} transaction BOCs (self-transfers)..."
+        (
+            cd "${ZEROSTATE_DIR}"
+            for SEQNO in $(seq 0 $((TX_COUNT - 1))); do
+                create-state \
+                    -I /usr/local/share/ton/fift/lib \
+                    -I /usr/local/share/ton/smartcont \
+                    -s wallet.fif \
+                    main-wallet \
+                    "${WALLET_DEST}" \
+                    "${SEQNO}" \
+                    0.01 \
+                    "${TX_DIR}/transfer_seqno_${SEQNO}" 2>&1 || true
+            done
+        )
+        GENERATED=$(ls "${TX_DIR}"/transfer_seqno_*.boc 2>/dev/null | wc -l)
+        echo "${GENERATED}" > "${TX_DIR}/count"
+        echo "Generated ${GENERATED}/${TX_COUNT} transaction BOCs."
+
         # .fhash/.rhash files contain raw 32-byte hashes written by the Fift script.
         ROOT_HASH_B64=$(base64 -w 0 < "${ZEROSTATE_DIR}/zerostate.rhash")
         FILE_HASH_B64=$(base64 -w 0 < "${ZEROSTATE_DIR}/zerostate.fhash")
@@ -432,6 +458,15 @@ echo "-1:-1" > ${METRIC_PREFIX}_udp_buf_errors
 # and reset their cross-invocation state (e.g., first-observed IDENTITY).
 date +%s%N > ${METRIC_PREFIX}_startup_id
 while true; do
+    # Only write heartbeat if validator-engine is actually running as PID 1.
+    # The heartbeat loop runs in a background subshell that can outlive the
+    # validator process during Antithesis fault injection. Without this check,
+    # workload scripts would see a fresh heartbeat and assume the validator is
+    # healthy when it's actually dead — causing false assertion failures.
+    if ! grep -q validator-engine /proc/1/cmdline 2>/dev/null; then
+        sleep 5
+        continue
+    fi
     date +%s > ${METRIC_PREFIX}_heartbeat
 
     # On first heartbeat iteration, write an explicit initialization marker to the log.
