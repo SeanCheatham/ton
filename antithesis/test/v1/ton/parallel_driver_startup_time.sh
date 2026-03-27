@@ -19,7 +19,8 @@ if [ ! -f /shared/validator_startup_id ]; then
     exit 0
 fi
 
-STARTUP_ID=$(cat /shared/validator_startup_id 2>/dev/null | tr -d '[:space:]')
+STARTUP_ID=$(cat /shared/validator_startup_id 2>/dev/null || true)
+STARTUP_ID=$(echo "$STARTUP_ID" | tr -d '[:space:]')
 if ! [[ "$STARTUP_ID" =~ ^[0-9]+$ ]] || [ "$STARTUP_ID" = "-1" ]; then
     echo "Startup ID invalid or not set, skipping"
     sleep 5

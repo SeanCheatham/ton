@@ -54,8 +54,10 @@ fi
 # Detect validator restart via startup_id — clear transition history on restart.
 # Antithesis may restart the container as part of fault injection; those restarts
 # should not count toward the crash-loop threshold.
-CURRENT_STARTUP=$(cat "$STARTUP_ID_FILE" 2>/dev/null | tr -d '[:space:]')
-PREV_STARTUP=$(cat "$PREV_STARTUP_FILE" 2>/dev/null | tr -d '[:space:]')
+CURRENT_STARTUP=$(cat "$STARTUP_ID_FILE" 2>/dev/null || true)
+CURRENT_STARTUP=$(echo "$CURRENT_STARTUP" | tr -d '[:space:]')
+PREV_STARTUP=$(cat "$PREV_STARTUP_FILE" 2>/dev/null || true)
+PREV_STARTUP=$(echo "$PREV_STARTUP" | tr -d '[:space:]')
 if [ -n "$CURRENT_STARTUP" ] && [ "$CURRENT_STARTUP" != "$PREV_STARTUP" ]; then
     echo "Validator restarted (startup_id changed), resetting transition log"
     echo "$CURRENT_STARTUP" > "$PREV_STARTUP_FILE"
