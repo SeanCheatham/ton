@@ -2405,6 +2405,9 @@ void LiteQuery::perform_lookupBlock(BlockId blkid, int mode, LogicalTime lt, Uni
           td::actor::send_closure(Self, &LiteQuery::abort_query, res.move_as_error());
         } else {
           auto handle = res.move_as_ok();
+          ALWAYS_OR_UNREACHABLE(handle->id().is_valid(),
+            "lookupBlock returned a valid block handle",
+            {{"block_id", handle->id().to_str()}});
           LOG(DEBUG) << "requesting data for block " << handle->id().to_str();
           td::actor::send_closure_later(manager, &ValidatorManager::get_block_data_from_db, handle,
                                         [Self, blkid = handle->id(), mode](td::Result<Ref<BlockData>> res) {
@@ -2488,8 +2491,14 @@ void LiteQuery::finish_listBlockTransactions(int mode, int req_count) {
   CHECK(block_.not_null());
   auto block_root = block_->root_cell();
   CHECK(block_root.not_null());
+  ALWAYS_OR_UNREACHABLE(block_.not_null() && block_root.not_null(),
+    "Block data is non-null in listBlockTransactions",
+    {{"block_id", base_blk_id_.to_str()}});
   RootHash rhash{block_root->get_hash().bits()};
   CHECK(rhash == base_blk_id_.root_hash);
+  ALWAYS_OR_UNREACHABLE(rhash == base_blk_id_.root_hash,
+    "Block root hash matches request in listBlockTransactions",
+    {{"block_id", base_blk_id_.to_str()}, {"expected_hash", base_blk_id_.root_hash.to_hex()}, {"actual_hash", rhash.to_hex()}});
   vm::MerkleProofBuilder pb;
   auto virt_root = block_root;
   if (mode & 32) {
@@ -2586,6 +2595,8 @@ void LiteQuery::finish_listBlockTransactions(int mode, int req_count) {
   }
 
   LOG(INFO) << "listBlockTransactions() query completed";
+  REACHABLE("Liteserver listBlockTransactions completed successfully",
+    {{"block_id", base_blk_id_.to_str()}, {"transaction_count", std::to_string(result.size())}});
   auto b = ton::create_serialize_tl_object<ton::lite_api::liteServer_blockTransactions>(
       ton::create_tl_lite_block_id(base_blk_id_), req_count, !eof, std::move(result), std::move(proof_data));
   finish_query(std::move(b));
