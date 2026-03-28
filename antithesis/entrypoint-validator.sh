@@ -92,7 +92,10 @@ if [ ! -f "${STATIC_DIR}/.zerostate_generated" ]; then
         #   1: {"@type":"pk.ed25519","key":"<base64>"}   private key
         #   2: {"@type":"pub.ed25519","key":"<base64>"}   public key
         #   3: {"@type":"adnl.id.short","id":"<base64>"}  ADNL short ID (key hash)
-        VAL_KEY_OUTPUT=$(generate-random-id -m id)
+        # NOTE: The Antithesis coverage instrumentation prints debug messages
+        # (e.g. "TRYING TO LOAD libvoidstar") to stdout before the JSON output.
+        # We filter to lines starting with '{' to skip those.
+        VAL_KEY_OUTPUT=$(generate-random-id -m id | grep '^\{')
         VAL_PRIV_B64=$(echo "$VAL_KEY_OUTPUT" | sed -n '1p' | jq -r '.key')
         VAL_PUB_B64=$(echo "$VAL_KEY_OUTPUT"  | sed -n '2p' | jq -r '.key')
         VAL_ID_B64=$(echo "$VAL_KEY_OUTPUT"   | sed -n '3p' | jq -r '.id')
@@ -148,7 +151,7 @@ if [ ! -f "${STATIC_DIR}/.zerostate_generated" ]; then
         generate-random-id -m dht \
             -k "${DB_ROOT}/keyring/${VAL_ID_HEX}" \
             -a "${ADDR_LIST_JSON}" \
-            > "${GENESIS_DHT_DIR}/${HOSTNAME}.json"
+            | grep '^\{' > "${GENESIS_DHT_DIR}/${HOSTNAME}.json"
 
         echo "Phase A complete: pubkey and DHT entry published for ${HOSTNAME} (IP: ${MY_IP})"
     else
@@ -310,7 +313,8 @@ if [ ! -f "${DB_ROOT}/config.json" ]; then
     #   1: {"@type":"pk.ed25519","key":"<base64>"}       (private key)
     #   2: {"@type":"pub.ed25519","key":"<base64>"}      (public key)
     #   3: {"@type":"adnl.id.short","id":"<base64>"}     (short id / key hash)
-    CONTROL_OUTPUT=$(generate-random-id -m id)
+    # Filter non-JSON lines from Antithesis instrumentation stdout noise.
+    CONTROL_OUTPUT=$(generate-random-id -m id | grep '^\{')
     CONTROL_PRIV=$(echo "$CONTROL_OUTPUT" | sed -n '1p')
     CONTROL_PUB_HASH=$(echo "$CONTROL_OUTPUT" | sed -n '3p' | jq -r '.id')
 
@@ -327,7 +331,7 @@ if [ ! -f "${DB_ROOT}/config.json" ]; then
         LITE_PUB_B64=$(cat "${GENESIS_IDENTITY_DIR}/liteserver_pub_b64")
     else
         echo "Generating liteserver key..."
-        LITE_OUTPUT=$(generate-random-id -m id)
+        LITE_OUTPUT=$(generate-random-id -m id | grep '^\{')
         LITE_PRIV=$(echo "$LITE_OUTPUT" | sed -n '1p')
         LITE_PUB_B64=$(echo "$LITE_OUTPUT" | sed -n '2p' | jq -r '.key')
         # Persist to shared volume for future restarts.
