@@ -2849,6 +2849,9 @@ void LiteQuery::continue_getBlockProof(ton::BlockIdExt from, ton::BlockIdExt to,
     return;
   }
   mc_state0_ = Ref<MasterchainStateQ>(state);
+  ALWAYS_OR_UNREACHABLE(base_blk_id_ == state->get_block_id(),
+    "Block proof reference state matches base block",
+    {{"base_blk", base_blk_id_.to_str()}, {"state_blk", state->get_block_id().to_str()}});
   if (base_blk_id_ != state->get_block_id()) {
     fatal_error("the state for "s + base_blk_id_.to_str() + " is in fact a state for different block " +
                 state->get_block_id().to_str());
@@ -2856,6 +2859,9 @@ void LiteQuery::continue_getBlockProof(ton::BlockIdExt from, ton::BlockIdExt to,
   }
   LOG(INFO) << "continuing getBlockProof(" << mode << ", " << from.to_str() << ", " << to.to_str()
             << ") query with a state for " << base_blk_id_.to_str();
+  ALWAYS_OR_UNREACHABLE(state->check_old_mc_block_id(from),
+    "Proof source block is known to reference state",
+    {{"from", from.to_str()}, {"base", base_blk_id_.to_str()}});
   if (!state->check_old_mc_block_id(from)) {
     fatal_error("proof source masterchain block "s + from.to_str() +
                 " is unknown from the perspective of reference block " + base_blk_id_.to_str());
@@ -3139,6 +3145,9 @@ bool LiteQuery::finish_proof_chain(ton::BlockIdExt id) {
     }
     chain_->complete = (id == chain_->to);
     chain_->to = id;
+    ALWAYS_OR_UNREACHABLE(chain_->link_count() <= 16,
+      "Block proof chain link count is bounded",
+      {{"link_count", std::to_string(chain_->link_count())}, {"from", chain_->from.to_str()}, {"to", chain_->to.to_str()}});
     // serialize answer
     std::vector<ton::tl_object_ptr<lite_api::liteServer_BlockLink>> a;
     for (auto& link : chain_->links) {
@@ -3176,6 +3185,8 @@ bool LiteQuery::finish_proof_chain(ton::BlockIdExt id) {
       }
     }
     LOG(INFO) << "getBlockProof() query completed";
+    REACHABLE("Liteserver getBlockProof completed successfully",
+      {{"from", chain_->from.to_str()}, {"to", chain_->to.to_str()}, {"links", std::to_string(chain_->link_count())}, {"complete", chain_->complete ? "true" : "false"}});
     auto c = ton::create_serialize_tl_object<ton::lite_api::liteServer_partialBlockProof>(
         chain_->complete, ton::create_tl_lite_block_id(chain_->from), ton::create_tl_lite_block_id(chain_->to),
         std::move(a));
