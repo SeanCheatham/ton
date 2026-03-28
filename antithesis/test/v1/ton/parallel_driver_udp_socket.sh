@@ -24,20 +24,12 @@ fi
 UDP_BOUND=$(cat /shared/validator_udp_bound 2>/dev/null || true)
 UDP_BOUND=$(echo "$UDP_BOUND" | tr -d '[:space:]')
 
-# If the metric file is missing, empty, or still at init value, try direct check
+# If the metric file is missing, empty, or still at init value, skip.
+# The /proc/net/udp fallback was removed because it reads the workload
+# container's network namespace, not the validator's — always wrong.
 if [[ -z "$UDP_BOUND" || "$UDP_BOUND" == "-1" ]]; then
-    # Fallback: read /proc/net/udp and /proc/net/udp6 directly (accessible from same network ns)
-    if [ -f /proc/net/udp ] || [ -f /proc/net/udp6 ]; then
-        FOUND=$(cat /proc/net/udp /proc/net/udp6 2>/dev/null | awk '$2 ~ /:7531$/ {found=1} END {print found+0}')
-        if [ "$FOUND" = "1" ]; then
-            UDP_BOUND="1"
-        else
-            UDP_BOUND="0"
-        fi
-    else
-        echo "UDP metric not available and /proc/net/udp not readable, skipping"
-        exit 0
-    fi
+    echo "SKIP: UDP bound metric not yet available (value='${UDP_BOUND}'), likely startup"
+    exit 0
 fi
 
 if [[ "$UDP_BOUND" == "1" ]]; then
