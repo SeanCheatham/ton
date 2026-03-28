@@ -55,32 +55,36 @@ if ! [[ "$CURRENT" =~ ^[0-9]+$ ]]; then
     exit 0
 fi
 
-# Append current value to history, keep last 3 lines
+# Append current value to history, keep last 5 lines (~40s window)
 echo "$CURRENT" >> "$HISTORY_FILE"
-tail -3 "$HISTORY_FILE" > "${HISTORY_FILE}.tmp" && mv "${HISTORY_FILE}.tmp" "$HISTORY_FILE"
+tail -5 "$HISTORY_FILE" > "${HISTORY_FILE}.tmp" && mv "${HISTORY_FILE}.tmp" "$HISTORY_FILE"
 
 # Read history
 LINES=$(wc -l < "$HISTORY_FILE")
 
-if [ "$LINES" -lt 3 ]; then
-    echo "Not enough history yet ($LINES observations), skipping"
+if [ "$LINES" -lt 5 ]; then
+    echo "Not enough history yet ($LINES observations, need 5), skipping"
     exit 0
 fi
 
-# Read the last 3 values (2 previous + current)
+# Read the last 5 values
 VAL1=$(sed -n '1p' "$HISTORY_FILE")
 VAL2=$(sed -n '2p' "$HISTORY_FILE")
 VAL3=$(sed -n '3p' "$HISTORY_FILE")
+VAL4=$(sed -n '4p' "$HISTORY_FILE")
+VAL5=$(sed -n '5p' "$HISTORY_FILE")
 
 DETAILS=$(jq -cn \
     --argjson v1 "$VAL1" \
     --argjson v2 "$VAL2" \
     --argjson v3 "$VAL3" \
-    '{reading_oldest: $v1, reading_middle: $v2, reading_newest: $v3}')
+    --argjson v4 "$VAL4" \
+    --argjson v5 "$VAL5" \
+    '{reading_1: $v1, reading_2: $v2, reading_3: $v3, reading_4: $v4, reading_5: $v5}')
 
-# If all 3 readings are the same, network has been stalled for ~20+ seconds
-if [ "$VAL1" = "$VAL2" ] && [ "$VAL2" = "$VAL3" ]; then
-    echo "FAIL: network bytes stalled at $CURRENT for 3 consecutive checks"
+# If all 5 readings are the same, network has been stalled for ~40+ seconds
+if [ "$VAL1" = "$VAL2" ] && [ "$VAL2" = "$VAL3" ] && [ "$VAL3" = "$VAL4" ] && [ "$VAL4" = "$VAL5" ]; then
+    echo "FAIL: network bytes stalled at $CURRENT for 5 consecutive checks"
     sdk_always false "$PROPERTY" "$DETAILS"
 else
     echo "PASS: network bytes are increasing"

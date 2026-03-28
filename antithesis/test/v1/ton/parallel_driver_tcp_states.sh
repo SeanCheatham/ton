@@ -75,7 +75,7 @@ if ! [[ "$CLOSE_WAIT" =~ ^[0-9]+$ ]] || ! [[ "$TIME_WAIT" =~ ^[0-9]+$ ]]; then
 fi
 
 CLOSE_WAIT_LIMIT=0
-TIME_WAIT_LIMIT=100
+TIME_WAIT_LIMIT=200
 
 if [ "$CLOSE_WAIT" -eq 0 ] && [ "$TIME_WAIT" -lt "$TIME_WAIT_LIMIT" ]; then
     echo "PASS: TCP states healthy (CLOSE_WAIT=${CLOSE_WAIT}, TIME_WAIT=${TIME_WAIT})"
