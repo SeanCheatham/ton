@@ -1678,6 +1678,9 @@ void LiteQuery::continue_getTransactions(unsigned remaining, bool exact) {
     auto root = res.move_as_ok();
     if (root.not_null()) {
       // transaction found
+      ALWAYS_OR_UNREACHABLE(trans_hash_ == root->get_hash().bits(),
+        "Transaction hash matches expected in getTransactions chain",
+        {{"account", acc_addr_.to_hex()}, {"lt", std::to_string(trans_lt_)}});
       if (trans_hash_ != root->get_hash().bits()) {
         if (!roots_.empty()) {
           LOG(ERROR) << "transaction hash mismatch: prev_trans_lt/hash invalid for " << acc_workchain_ << ":"
@@ -1692,6 +1695,9 @@ void LiteQuery::continue_getTransactions(unsigned remaining, bool exact) {
         fatal_error("cannot unpack transaction");
         return;
       }
+      ALWAYS_OR_UNREACHABLE(trans.prev_trans_lt < trans_lt_,
+        "Transaction prev_trans_lt is strictly less than current lt",
+        {{"prev_lt", std::to_string(trans.prev_trans_lt)}, {"current_lt", std::to_string(trans_lt_)}});
       if (trans.prev_trans_lt >= trans_lt_) {
         fatal_error("previous transaction time is not less than the current one");
         return;
@@ -1772,6 +1778,8 @@ void LiteQuery::abort_getTransactions(td::Status error, ton::BlockIdExt blkid) {
 }
 
 void LiteQuery::finish_getTransactions() {
+  REACHABLE("Liteserver getTransactions completed successfully",
+    {{"transaction_count", std::to_string(roots_.size())}, {"account", acc_addr_.to_hex()}});
   LOG(INFO) << "completing getTransactions() liteserver query";
   auto res = vm::std_boc_serialize_multi(std::move(roots_));
   if (res.is_error()) {
