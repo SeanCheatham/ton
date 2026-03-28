@@ -286,6 +286,19 @@ Antithesis assertions are embedded inline in `collator.cpp` to cover the block C
 | **Secondary** | `SOMETIMES(advancing_during_faults, "Masterchain height observed advancing during faults")` — emitted when height advances while heartbeat is stale (>30s), creating a branch point for fault+progress exploration |
 | **Status** | ✅ Implemented |
 
+### Cross-Validator Block Hash Matches at Same Height
+
+| | |
+|---|---|
+| **Type** | Safety (Always) |
+| **Property** | Validators must agree on the actual block content (root hash + file hash) at a given masterchain height — not just the seqno |
+| **Invariant** | `ALWAYS(block_id_1 == block_id_2, "Cross-validator block hash matches at same height")` — evaluated when at least 2 of 3 validators respond with a block ID for the same seqno |
+| **Antithesis Angle** | Fault injection may trigger consensus forks where validators produce different blocks at the same height |
+| **Why It Matters** | The strongest consensus safety check — two validators with the same seqno but different block hashes indicates a consensus fork, the most critical safety violation in a blockchain |
+| **Workload** | `anytime_block_hash_consensus.sh` — queries `lite-client -c "byseqno -1 8000000000000000 N"` on all 3 validators, compares full block ID strings `(-1,8000000000000000,N):ROOTHASH:FILEHASH` |
+| **Secondary** | `SOMETIMES(true, "Block hash verified across multiple validators")` — emitted when ≥2 validators respond with matching hashes |
+| **Status** | ✅ Implemented |
+
 ### Consensus Recovered After Fault
 
 | | |
