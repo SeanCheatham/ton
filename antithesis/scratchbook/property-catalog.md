@@ -311,6 +311,30 @@ Antithesis assertions are embedded inline in `collator.cpp` to cover the block C
 | **Workload** | `eventually_consensus_recovers.sh` — two-phase state machine persisted in `/shared/_consensus_recovery_state` |
 | **Status** | ✅ Implemented |
 
+### Wallet Balance Is Consistent Between Transfer Invocations
+
+| | |
+|---|---|
+| **Type** | Safety (Always) |
+| **Property** | After a confirmed transfer, the wallet balance must not increase between invocations (no incoming transfers exist, so balance can only decrease from outgoing transfers + fees) |
+| **Invariant** | `ALWAYS(current_balance <= previous_balance, "Wallet balance is consistent between transfer invocations")` — evaluated when a previous balance was recorded and current balance is queryable |
+| **Antithesis Angle** | Fault injection may cause acknowledged-but-lost writes where a transfer is confirmed (seqno advances) but the balance change is rolled back |
+| **Why It Matters** | Detects the most critical data loss pattern: a transfer that was acknowledged but whose value effect was lost — invisible to seqno-only checks |
+| **Workload** | `serial_driver_send_transfer.sh` — reads previous balance from `/shared/tx/last_confirmed_balance`, queries current balance via `getaccount` before sending new transfer |
+| **Status** | ✅ Implemented |
+
+### Transfer Read-Back Balance Verified
+
+| | |
+|---|---|
+| **Type** | Liveness (Sometimes) |
+| **Property** | The balance read-back verification passes after a confirmed transfer |
+| **Invariant** | `SOMETIMES(current_balance <= previous_balance, "Transfer read-back balance verified")` — emitted when balance check passes between invocations |
+| **Antithesis Angle** | Creates a branch point at balance verification moments, guiding exploration toward transfer durability scenarios |
+| **Why It Matters** | Confirms the write-verify loop is actually exercising the read-back path — complements the Always guard by proving the check ran |
+| **Workload** | `serial_driver_send_transfer.sh` — same workload as above, emitted alongside the Always assertion when balance is consistent |
+| **Status** | ✅ Implemented |
+
 ### All Acknowledged Transfers Persist in Final State
 
 | | |

@@ -36,6 +36,6 @@ The existing `finally_health_check.sh` only checks port reachability. This scrip
 
 ## Dependencies
 
-- `serial_driver_send_transfer.sh` — writes `/shared/tx/last_confirmed_seqno`
+- `serial_driver_send_transfer.sh` — writes `/shared/tx/last_confirmed_seqno` and `/shared/tx/last_confirmed_balance`
 - Wallet address: `-1:0000000000000000000000000000000000000000000000000000000000000000`
 - Runmethod 85143 (seqno getter)
