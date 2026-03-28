@@ -1939,6 +1939,9 @@ void LiteQuery::continue_getConfigParams(int mode, std::vector<int> param_list) 
     }
     cfg = res.move_as_ok();
   }
+  ALWAYS_OR_UNREACHABLE(cfg != nullptr,
+    "Config extraction succeeded in getConfigParams",
+    {{"block_id", base_blk_id_.to_str()}, {"mode", std::to_string(mode)}});
   if (!cfg) {
     fatal_error("cannot extract configuration from last mc state");
     return;
@@ -2034,6 +2037,8 @@ void LiteQuery::continue_getAllShardsInfo() {
     return;
   }
   vm::Dictionary shards_dict(std::move(mc_extra.shard_hashes), 32);
+  REACHABLE("Liteserver getAllShardsInfo shard dictionary created",
+    {{"block_id", mc_block_->block_id().to_str()}});
   Ref<vm::Cell> proof;
   if (!mpb.extract_proof_to(proof)) {
     fatal_error("cannot construct Merkle proof for all shards dictionary");
@@ -2055,6 +2060,9 @@ void LiteQuery::continue_getAllShardsInfo() {
     fatal_error(data.move_as_error());
     return;
   }
+  ALWAYS_OR_UNREACHABLE(data.is_ok() && !data.ok().empty(),
+    "getAllShardsInfo serialized data is non-empty",
+    {{"block_id", base_blk_id_.to_str()}});
   LOG(INFO) << "getAllShardInfo() query completed";
   auto b = ton::create_serialize_tl_object<ton::lite_api::liteServer_allShardsInfo>(
       ton::create_tl_lite_block_id(base_blk_id_), proof_boc.move_as_ok(), data.move_as_ok());
