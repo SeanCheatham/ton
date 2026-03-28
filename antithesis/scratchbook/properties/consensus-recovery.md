@@ -14,10 +14,13 @@ Existing recovery detection (`parallel_driver_recovery_observed.sh`) operates at
 
 Two-phase state machine persisted in `/shared/_consensus_recovery_state`:
 
+### Cold-Start Guard
+On the very first invocation (no `last_good_seqno` and no `fault_ts` in the state file), the script skips fault detection and assertion emission entirely. This prevents a false fault on cold start when `query_ok=false` simply because no healthy baseline has been established yet. The script logs the situation and exits 0 without polluting Sometimes assertions.
+
 ### Phase 1 — Fault Detection
-A fault is recorded when either:
-- Liteserver query fails (lite-client cannot retrieve masterchain seqno)
-- Heartbeat is stale (>60s old)
+A fault is recorded when **all** of the following hold:
+- Either liteserver query fails or heartbeat is stale (>60s old)
+- A healthy baseline exists (`last_good_seqno` was previously recorded)
 
 On fault detection, we persist `fault_ts` and `last_good_seqno` (the last successfully queried seqno before the fault).
 

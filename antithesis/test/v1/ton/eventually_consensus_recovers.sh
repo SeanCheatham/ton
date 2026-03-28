@@ -97,7 +97,7 @@ if [[ "${query_ok}" == "false" || "${heartbeat_stale}" == "true" ]]; then
     fault_detected=true
 fi
 
-if [[ "${fault_detected}" == "true" && -z "${fault_ts}" ]]; then
+if [[ "${fault_detected}" == "true" && -z "${fault_ts}" && -n "${last_good_seqno}" ]]; then
     # Phase 1: entering fault state — record it
     # Preserve current seqno as last_good if we had one from a previous invocation
     # or use whatever was stored previously
@@ -157,6 +157,11 @@ if [[ "${query_ok}" == "true" ]]; then
     echo "Healthy — updating last_good_seqno=${current_seqno}"
     echo "last_good_seqno=${current_seqno}" > "${STATE_FILE}"
 else
+    # Cold start: no baseline seqno and no fault recorded — skip assertion emission
+    if [[ -z "${last_good_seqno}" && -z "${fault_ts}" ]]; then
+        echo "Cold start — no healthy baseline yet, skipping assertion"
+        exit 0
+    fi
     echo "No state change"
 fi
 
