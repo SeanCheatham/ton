@@ -46,7 +46,6 @@ RUN --mount=type=cache,target=/ton/build \
     --mount=type=cache,target=/ccache \
     cd /ton/build && \
     cmake -GNinja -DCMAKE_BUILD_TYPE=Release -DPORTABLE=1 -DTON_ARCH= -DTON_USE_JEMALLOC=ON \
-          -DMEMPROF=ON \
           -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
           -DCMAKE_C_FLAGS="-fsanitize-coverage=trace-pc-guard -g" \
           -DCMAKE_CXX_FLAGS="-fsanitize-coverage=trace-pc-guard -g" \

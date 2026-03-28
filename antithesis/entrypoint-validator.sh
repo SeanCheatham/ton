@@ -1009,5 +1009,4 @@ exec validator-engine \
     --ip "${IP}:${VALIDATOR_PORT}" \
     --threads "${THREADS}" \
     --verbosity "${VERBOSITY}" \
-    --logname "${LOG_FILE}" \
-    2>>"${LOG_FILE}"
+    --logname "${LOG_FILE}"
