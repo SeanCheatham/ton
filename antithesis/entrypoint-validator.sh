@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+RESTART_START=$(date +%s)
+echo "Entrypoint started at $(date -Iseconds)"
+
 # Entrypoint for the TON validator-engine in the Antithesis environment.
 # Supports multi-validator consensus testing via a shared-volume genesis
 # rendezvous protocol. The genesis coordinator (IS_GENESIS_COORDINATOR=true)
@@ -168,6 +171,7 @@ if [ ! -f "${STATIC_DIR}/.zerostate_generated" ]; then
             echo "Validator identity restored (id_hex=${RESTORED_ID_HEX:0:8}...)"
         fi
     fi
+    echo "Phase A complete in $(($(date +%s) - RESTART_START))s"
 
     # ------------------------------------------------------------------
     # Phase B (coordinator only): wait for all validators, generate
@@ -282,6 +286,8 @@ GCEOF
         echo "Phase C: Genesis sentinel detected."
     fi
 
+    echo "Genesis ready in $(($(date +%s) - RESTART_START))s"
+
     # Copy zerostate BOC files and global config from shared genesis to local DB.
     mkdir -p "${STATIC_DIR}"
     cp "${GENESIS_STATIC_DIR}/"* "${STATIC_DIR}/"
@@ -309,12 +315,26 @@ if [ ! -f "${DB_ROOT}/config.json" ]; then
     CONTROL_PUB_HASH=$(echo "$CONTROL_OUTPUT" | sed -n '3p' | jq -r '.id')
 
     # Generate a known liteserver key so we can export the public key for
-    # lite-client usage. Using liteserver.config.local (not random) lets us
-    # capture the public key before the init step.
-    echo "Generating liteserver key..."
-    LITE_OUTPUT=$(generate-random-id -m id)
-    LITE_PRIV=$(echo "$LITE_OUTPUT" | sed -n '1p')
-    LITE_PUB_B64=$(echo "$LITE_OUTPUT" | sed -n '2p' | jq -r '.key')
+    # lite-client usage. Persist the key to shared volume so it survives
+    # container restarts — mirrors the validator identity pattern in Phase A.
+    # Without persistence, a fresh key on restart invalidates the public key
+    # in /shared/liteserver.config.json, causing lite-client auth failures.
+    GENESIS_IDENTITY_DIR="${GENESIS_DIR}/identity/${HOSTNAME}"
+    mkdir -p "${GENESIS_IDENTITY_DIR}"
+    if [ -f "${GENESIS_IDENTITY_DIR}/liteserver_priv" ] && [ -f "${GENESIS_IDENTITY_DIR}/liteserver_pub_b64" ]; then
+        echo "Restoring liteserver key from shared volume..."
+        LITE_PRIV=$(cat "${GENESIS_IDENTITY_DIR}/liteserver_priv")
+        LITE_PUB_B64=$(cat "${GENESIS_IDENTITY_DIR}/liteserver_pub_b64")
+    else
+        echo "Generating liteserver key..."
+        LITE_OUTPUT=$(generate-random-id -m id)
+        LITE_PRIV=$(echo "$LITE_OUTPUT" | sed -n '1p')
+        LITE_PUB_B64=$(echo "$LITE_OUTPUT" | sed -n '2p' | jq -r '.key')
+        # Persist to shared volume for future restarts.
+        echo "${LITE_PRIV}" > "${GENESIS_IDENTITY_DIR}/liteserver_priv"
+        echo "${LITE_PUB_B64}" > "${GENESIS_IDENTITY_DIR}/liteserver_pub_b64"
+        echo "Liteserver key persisted to shared volume."
+    fi
     echo "${LITE_PUB_B64}" > "${DB_ROOT}/.liteserver_pub_b64"
 
     # Load the validator identity saved during Phase A so the engine
@@ -371,6 +391,7 @@ LOCALEOF
         --ip "${IP}:${VALIDATOR_PORT}" \
         -c /tmp/local-config.json || true
 
+    echo "Config generated in $(($(date +%s) - RESTART_START))s"
     echo "Initialization complete. Config written to ${DB_ROOT}/config.json"
 fi
 
@@ -383,7 +404,9 @@ if [ -f "${DB_ROOT}/config.json" ]; then
         # IP is encoded as a signed 32-bit integer. For the Docker network, the workload
         # uses the hostname "validator" via -a flag, but we still need the key for auth.
         # Use 2130706433 (127.0.0.1) as placeholder — workload overrides with -a flag.
-        cat > "${LITESERVER_CONFIG}" <<LITEEOF
+        # Write to a temp file then mv atomically to prevent workload scripts from
+        # reading a partially-written config during restarts.
+        cat > "${LITESERVER_CONFIG}.tmp" <<LITEEOF
 {
     "@type": "config.global",
     "liteservers": [
@@ -399,6 +422,7 @@ if [ -f "${DB_ROOT}/config.json" ]; then
     ]
 }
 LITEEOF
+        mv "${LITESERVER_CONFIG}.tmp" "${LITESERVER_CONFIG}"
         echo "Liteserver config exported to ${LITESERVER_CONFIG}"
     else
         echo "Warning: could not extract liteserver key from config.json"
@@ -973,6 +997,7 @@ while true; do
 done
 ) &
 
+echo "Total startup: $(($(date +%s) - RESTART_START))s"
 echo "Starting validator-engine..."
 exec validator-engine \
     -C "${GLOBAL_CONFIG}" \
