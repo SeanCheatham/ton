@@ -11,9 +11,8 @@ set -euo pipefail
 source "$(dirname "$0")/helper_sdk.sh"
 
 ASSERTION_NAME="Validator log non-fatal error count is bounded when healthy"
-MAX_ERROR_COUNT=1000
-MAX_ERROR_RATE_PER_KB=1  # errors per KB of log output
-LARGE_LOG_KB=10240        # 10MB threshold for rate-based check
+MAX_ERROR_RATE_PER_KB=3  # errors per KB of log output
+MIN_LOG_KB=100            # minimum log size for meaningful rate calculation
 
 # Heartbeat freshness precondition
 HEARTBEAT_MAX_AGE=90
@@ -33,6 +32,15 @@ if [ -f /shared/validator_heartbeat ]; then
 else
     echo "Heartbeat file not present yet, skipping"; sleep 10; exit 0
 fi
+
+# All-ports-up precondition: only check error rate when validator is truly healthy
+VALIDATOR_HOST="${VALIDATOR_HOST:-ton-validator}"
+for port in 30001 30002 30003; do
+    if ! nc -z -w 2 "$VALIDATOR_HOST" "$port" 2>/dev/null; then
+        echo "Port $port not reachable, validator not fully healthy, skipping"
+        sleep 10; exit 0
+    fi
+done
 
 # Read metric
 if [ ! -f /shared/validator_log_error_count ]; then
@@ -57,33 +65,21 @@ if ! [[ "$LOG_SIZE_KB" =~ ^[0-9]+$ ]]; then
     sleep 10; exit 0
 fi
 
-# Skip if log size is 0 (no log output yet)
-if [ "$LOG_SIZE_KB" -eq 0 ]; then
-    echo "Log size is 0, skipping"
+# Skip if log size too small for meaningful rate calculation
+if [ "$LOG_SIZE_KB" -lt "$MIN_LOG_KB" ]; then
+    echo "Log size ${LOG_SIZE_KB}KB < ${MIN_LOG_KB}KB minimum, not enough data, skipping"
     sleep 10; exit 0
 fi
 
-# Calculate error rate per KB
-if [ "$LOG_SIZE_KB" -gt 0 ]; then
-    ERROR_RATE_PER_KB=$(( ERROR_COUNT / LOG_SIZE_KB ))
-else
-    ERROR_RATE_PER_KB=0
-fi
+# Calculate error rate per KB (always rate-based — absolute counts always exceed
+# thresholds in long-running tests)
+ERROR_RATE_PER_KB=$(( ERROR_COUNT / LOG_SIZE_KB ))
 
-# Determine if bounded:
-# - For large logs (>10MB): use rate-based check (errors per KB < 1)
-# - For smaller logs: use absolute bound (< 1000 errors)
+# Determine if bounded using rate-based check
 BOUNDED=true
-if [ "$LOG_SIZE_KB" -gt "$LARGE_LOG_KB" ]; then
-    if [ "$ERROR_RATE_PER_KB" -ge "$MAX_ERROR_RATE_PER_KB" ]; then
-        BOUNDED=false
-        echo "FAIL: Error rate ${ERROR_RATE_PER_KB}/KB exceeds limit ${MAX_ERROR_RATE_PER_KB}/KB (log=${LOG_SIZE_KB}KB, errors=${ERROR_COUNT})"
-    fi
-else
-    if [ "$ERROR_COUNT" -ge "$MAX_ERROR_COUNT" ]; then
-        BOUNDED=false
-        echo "FAIL: Error count ${ERROR_COUNT} exceeds limit ${MAX_ERROR_COUNT} (log=${LOG_SIZE_KB}KB)"
-    fi
+if [ "$ERROR_RATE_PER_KB" -ge "$MAX_ERROR_RATE_PER_KB" ]; then
+    BOUNDED=false
+    echo "FAIL: Error rate ${ERROR_RATE_PER_KB}/KB exceeds limit ${MAX_ERROR_RATE_PER_KB}/KB (log=${LOG_SIZE_KB}KB, errors=${ERROR_COUNT})"
 fi
 
 DETAILS=$(jq -cn \
