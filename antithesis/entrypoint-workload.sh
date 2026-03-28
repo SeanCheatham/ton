@@ -184,6 +184,8 @@ sdk_catalog_sometimes "Cross-validator account state is consistent after transfe
 sdk_catalog_always "Cross-validator wallet seqno divergence is bounded"
 sdk_catalog_always "All acknowledged transfers persist in final state"
 sdk_catalog_sometimes "Transfer state verified at end of timeline"
+sdk_catalog_always "All validators converged to same masterchain state at end of timeline"
+sdk_catalog_sometimes "Consensus convergence verified across all validators"
 sdk_catalog_sometimes "Consensus recovered after fault"
 sdk_catalog_sometimes "Liteserver getblock query returned valid data"
 echo "Assertion catalog emitted."

@@ -372,6 +372,20 @@ Antithesis assertions are embedded inline in `collator.cpp` to cover the block C
 | **Secondary** | `SOMETIMES(true, "Transfer state verified at end of timeline")` — emitted when the check completes successfully, confirming the verification ran |
 | **Status** | ✅ Implemented |
 
+### All Validators Converged to Same Masterchain State at End of Timeline
+
+| | |
+|---|---|
+| **Type** | Safety (Always) |
+| **Property** | After all faults settle at timeline end, all responding validators must agree on the same masterchain block — the definitive consensus verdict |
+| **Invariant** | `ALWAYS(block_ids_match, "All validators converged to same masterchain state at end of timeline")` — evaluated when ≥2 validators respond; seqno tolerance ≤1, but same seqno requires identical block ID (root hash + file hash) |
+| **Antithesis Angle** | All fault injection has concluded — this checks whether the network recovered to a single consistent state |
+| **Why It Matters** | The strongest end-of-timeline consensus check: same seqno + different block hash = fork = critical safety violation. Complements `anytime_block_hash_consensus.sh` (during faults) and `finally_verify_transfers.sh` (data persistence) |
+| **Workload** | `finally_consensus_converged.sh` — queries `lite-client -c "last"` from all 3 validators' liteservers, compares full block ID strings `(-1,8000000000000000,N):ROOTHASH:FILEHASH` |
+| **Secondary** | `SOMETIMES(all_3_match, "Consensus convergence verified across all validators")` — emitted when all 3 validators responded with identical masterchain state (seqno diff = 0) |
+| **Skip Conditions** | Fewer than 2 validators reachable, lite-client unavailable, liteserver configs missing |
+| **Status** | ✅ Implemented |
+
 ## Future Properties (for antithesis-workload)
 
 ### 2. Validator Engine Does Not Crash
