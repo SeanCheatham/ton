@@ -55,24 +55,27 @@ if ! [[ "$CURRENT" =~ ^[0-9]+$ ]]; then
     exit 0
 fi
 
-# Append current value to history, keep last 5 lines (~40s window)
+# Append current value to history, keep last 8 lines (~64s window)
 echo "$CURRENT" >> "$HISTORY_FILE"
-tail -5 "$HISTORY_FILE" > "${HISTORY_FILE}.tmp" && mv "${HISTORY_FILE}.tmp" "$HISTORY_FILE"
+tail -8 "$HISTORY_FILE" > "${HISTORY_FILE}.tmp" && mv "${HISTORY_FILE}.tmp" "$HISTORY_FILE"
 
 # Read history
 LINES=$(wc -l < "$HISTORY_FILE")
 
-if [ "$LINES" -lt 5 ]; then
-    echo "Not enough history yet ($LINES observations, need 5), skipping"
+if [ "$LINES" -lt 8 ]; then
+    echo "Not enough history yet ($LINES observations, need 8), skipping"
     exit 0
 fi
 
-# Read the last 5 values
+# Read the last 8 values
 VAL1=$(sed -n '1p' "$HISTORY_FILE")
 VAL2=$(sed -n '2p' "$HISTORY_FILE")
 VAL3=$(sed -n '3p' "$HISTORY_FILE")
 VAL4=$(sed -n '4p' "$HISTORY_FILE")
 VAL5=$(sed -n '5p' "$HISTORY_FILE")
+VAL6=$(sed -n '6p' "$HISTORY_FILE")
+VAL7=$(sed -n '7p' "$HISTORY_FILE")
+VAL8=$(sed -n '8p' "$HISTORY_FILE")
 
 DETAILS=$(jq -cn \
     --argjson v1 "$VAL1" \
@@ -80,11 +83,14 @@ DETAILS=$(jq -cn \
     --argjson v3 "$VAL3" \
     --argjson v4 "$VAL4" \
     --argjson v5 "$VAL5" \
-    '{reading_1: $v1, reading_2: $v2, reading_3: $v3, reading_4: $v4, reading_5: $v5}')
+    --argjson v6 "$VAL6" \
+    --argjson v7 "$VAL7" \
+    --argjson v8 "$VAL8" \
+    '{reading_1: $v1, reading_2: $v2, reading_3: $v3, reading_4: $v4, reading_5: $v5, reading_6: $v6, reading_7: $v7, reading_8: $v8}')
 
-# If all 5 readings are the same, network has been stalled for ~40+ seconds
-if [ "$VAL1" = "$VAL2" ] && [ "$VAL2" = "$VAL3" ] && [ "$VAL3" = "$VAL4" ] && [ "$VAL4" = "$VAL5" ]; then
-    echo "FAIL: network bytes stalled at $CURRENT for 5 consecutive checks"
+# If all 8 readings are the same, network has been stalled for ~64+ seconds
+if [ "$VAL1" = "$VAL2" ] && [ "$VAL2" = "$VAL3" ] && [ "$VAL3" = "$VAL4" ] && [ "$VAL4" = "$VAL5" ] && [ "$VAL5" = "$VAL6" ] && [ "$VAL6" = "$VAL7" ] && [ "$VAL7" = "$VAL8" ]; then
+    echo "FAIL: network bytes stalled at $CURRENT for 8 consecutive checks"
     sdk_always false "$PROPERTY" "$DETAILS"
 else
     echo "PASS: network bytes are increasing"

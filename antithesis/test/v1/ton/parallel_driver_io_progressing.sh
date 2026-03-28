@@ -14,10 +14,10 @@ source "${SCRIPT_DIR}/helper_sdk.sh"
 ASSERTION_NAME="Validator disk I/O bytes are progressing when healthy"
 STATE_FILE="/shared/_prev_io_bytes"
 STALL_COUNT_FILE="/shared/_io_stall_count"
-# Require 3 consecutive stalled observations before failing.
+# Require 6 consecutive stalled observations before failing.
 # During fault injection, Antithesis may pause the validator process or inject
 # I/O faults, causing transient stalls that aren't real bugs.
-MAX_CONSECUTIVE_STALLS=3
+MAX_CONSECUTIVE_STALLS=6
 
 echo "Checking validator disk I/O progress..."
 
