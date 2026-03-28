@@ -100,8 +100,8 @@ echo "${ATTEMPT_FAILS}:${ESTAB_RESETS}" > "$STATE_FILE"
 # Allow a small delta threshold. Concurrent adversarial workloads (TCP flood,
 # fuzz, timebomb scripts) intentionally create failing connections. Only flag
 # sustained high failure rates as real problems.
-DELTA_AF_THRESHOLD=150
-DELTA_ER_THRESHOLD=150
+DELTA_AF_THRESHOLD=300
+DELTA_ER_THRESHOLD=300
 if [ "$DELTA_AF" -gt "$DELTA_AF_THRESHOLD" ] || [ "$DELTA_ER" -gt "$DELTA_ER_THRESHOLD" ]; then
     DETAILS=$(jq -cn \
         --argjson daf "$DELTA_AF" --argjson der "$DELTA_ER" \

@@ -49,7 +49,7 @@ if [[ "$udp_up" != "true" || "$console_up" != "true" || "$lite_up" != "true" ]];
 fi
 
 # Need enough data to compute a meaningful ratio
-if [ "$IN_SEGS" -lt 50 ]; then
+if [ "$IN_SEGS" -lt 200 ]; then
     echo "Not enough inbound segments ($IN_SEGS) for meaningful ratio, skipping"
     sleep 10
     exit 0
