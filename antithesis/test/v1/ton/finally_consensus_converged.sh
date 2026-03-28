@@ -24,6 +24,7 @@ VALIDATOR3_HOST="${VALIDATOR3_HOST:-ton-validator3}"
 LITE_PORT="${LITE_PORT:-30003}"
 
 ALWAYS_NAME="All validators converged to same masterchain state at end of timeline"
+ACCOUNT_STATE_ALWAYS="Account state consistent across validators at end of timeline"
 SOMETIMES_NAME="Consensus convergence verified across all validators"
 
 # Heartbeat freshness threshold (seconds)
@@ -38,6 +39,7 @@ HB_FILES=("/shared/validator_heartbeat" "/shared/validator2_heartbeat" "/shared/
 HB_LABELS=("v1" "v2" "v3")
 
 sdk_catalog_always "${ALWAYS_NAME}"
+sdk_catalog_always "${ACCOUNT_STATE_ALWAYS}"
 sdk_catalog_sometimes "${SOMETIMES_NAME}"
 
 # --- Preconditions (skip, not fail) ---
@@ -118,6 +120,34 @@ query_last_block() {
 parse_seqno() {
     local block_id="$1"
     echo "${block_id}" | grep -oP '\(-1,[0-9a-fA-F]+,\K[0-9]+' || true
+}
+
+# Query account state from a validator's liteserver.
+# Returns raw lite-client output for parsing trans_lt, trans_hash, balance.
+# Args: <host> <config_file>
+query_account_state() {
+    local host="$1" config="$2"
+    local wallet="-1:0000000000000000000000000000000000000000000000000000000000000000"
+
+    if [ ! -f "${config}" ]; then
+        echo ""
+        return
+    fi
+
+    if ! nc -z -w 2 "${host}" "${LITE_PORT}" 2>/dev/null; then
+        echo ""
+        return
+    fi
+
+    local ip
+    ip=$(resolve_ip "${host}")
+
+    timeout 10 lite-client \
+        -v 1 \
+        -a "${ip}:${LITE_PORT}" \
+        -C "${config}" \
+        -c "getaccount ${wallet}" \
+        -c 'quit' 2>&1 || true
 }
 
 # --- Wait for all validator heartbeats to become fresh ---
@@ -259,6 +289,102 @@ if [ "${SEQNO_DIFF}" -gt 0 ] && [ "${SEQNO_DIFF}" -le "${SEQNO_TOLERANCE}" ]; th
     done
 fi
 
+# --- Account state verification across validators at same seqno ---
+
+ACCOUNT_LT_CONSISTENT=true
+ACCOUNT_MISMATCH_DETAIL=""
+V1_TRANS_LT="n/a"
+V2_TRANS_LT="n/a"
+V3_TRANS_LT="n/a"
+V1_TRANS_HASH="n/a"
+V2_TRANS_HASH="n/a"
+V3_TRANS_HASH="n/a"
+ACCOUNT_STATE_CHECKED=false
+
+# Only check account state if we have >=2 validators at the SAME seqno
+# Build arrays of validators grouped by seqno
+HOSTS=("${VALIDATOR_HOST}" "${VALIDATOR2_HOST}" "${VALIDATOR3_HOST}")
+CONFIGS=("/shared/liteserver.config.json" "/shared/liteserver2.config.json" "/shared/liteserver3.config.json")
+LABELS_ALL=("v1" "v2" "v3")
+
+# Find validators that share the same seqno
+for i in "${!SEQNOS[@]}"; do
+    SAME_SEQNO_COUNT=0
+    for j in "${!SEQNOS[@]}"; do
+        if [ "${SEQNOS[$i]}" -eq "${SEQNOS[$j]}" ]; then
+            SAME_SEQNO_COUNT=$((SAME_SEQNO_COUNT + 1))
+        fi
+    done
+    if [ "${SAME_SEQNO_COUNT}" -ge 2 ]; then
+        ACCOUNT_STATE_CHECKED=true
+        break
+    fi
+done
+
+if [ "${ACCOUNT_STATE_CHECKED}" = "true" ]; then
+    echo "Checking elector account state across validators with matching seqnos..."
+
+    # Query account state from each responding validator
+    ACCT_TRANS_LTS=()
+    ACCT_TRANS_HASHES=()
+
+    for i in "${!VALIDATOR_LABELS_RESP[@]}"; do
+        label="${VALIDATOR_LABELS_RESP[$i]}"
+        # Map label back to host/config index
+        case "${label}" in
+            v1) host="${HOSTS[0]}"; config="${CONFIGS[0]}" ;;
+            v2) host="${HOSTS[1]}"; config="${CONFIGS[1]}" ;;
+            v3) host="${HOSTS[2]}"; config="${CONFIGS[2]}" ;;
+        esac
+
+        output=$(query_account_state "${host}" "${config}")
+        trans_lt=$(echo "${output}" | grep -oP 'last transaction lt = \K[0-9]+' | head -1 || true)
+        trans_hash=$(echo "${output}" | grep -oP 'hash = \K[0-9a-fA-F]{64}' | head -1 || true)
+
+        ACCT_TRANS_LTS+=("${trans_lt:-}")
+        ACCT_TRANS_HASHES+=("${trans_hash:-}")
+
+        # Store per-validator values for details JSON
+        case "${label}" in
+            v1) V1_TRANS_LT="${trans_lt:-n/a}"; V1_TRANS_HASH="${trans_hash:-n/a}" ;;
+            v2) V2_TRANS_LT="${trans_lt:-n/a}"; V2_TRANS_HASH="${trans_hash:-n/a}" ;;
+            v3) V3_TRANS_LT="${trans_lt:-n/a}"; V3_TRANS_HASH="${trans_hash:-n/a}" ;;
+        esac
+
+        echo "  ${label} (seqno ${SEQNOS[$i]}): trans_lt=${trans_lt:-empty} trans_hash=${trans_hash:-empty}"
+    done
+
+    # Compare (trans_lt, trans_hash) for validators at the SAME seqno
+    for i in "${!VALIDATOR_LABELS_RESP[@]}"; do
+        for j in "${!VALIDATOR_LABELS_RESP[@]}"; do
+            if [ "$i" -lt "$j" ] && [ "${SEQNOS[$i]}" -eq "${SEQNOS[$j]}" ]; then
+                lt_i="${ACCT_TRANS_LTS[$i]}"
+                lt_j="${ACCT_TRANS_LTS[$j]}"
+                hash_i="${ACCT_TRANS_HASHES[$i]}"
+                hash_j="${ACCT_TRANS_HASHES[$j]}"
+
+                # Skip if either validator returned empty (query failed)
+                if [ -z "${lt_i}" ] || [ -z "${lt_j}" ] || [ -z "${hash_i}" ] || [ -z "${hash_j}" ]; then
+                    echo "  Skipping comparison ${VALIDATOR_LABELS_RESP[$i]} vs ${VALIDATOR_LABELS_RESP[$j]}: incomplete data"
+                    continue
+                fi
+
+                if [ "${lt_i}" != "${lt_j}" ] || [ "${hash_i}" != "${hash_j}" ]; then
+                    ACCOUNT_LT_CONSISTENT=false
+                    ACCOUNT_MISMATCH_DETAIL="Account state divergence at seqno ${SEQNOS[$i]}: ${VALIDATOR_LABELS_RESP[$i]}=(lt=${lt_i},hash=${hash_i}) vs ${VALIDATOR_LABELS_RESP[$j]}=(lt=${lt_j},hash=${hash_j})"
+                    echo "CRITICAL: ${ACCOUNT_MISMATCH_DETAIL}"
+                fi
+            fi
+        done
+    done
+
+    if [ "${ACCOUNT_LT_CONSISTENT}" = "true" ]; then
+        echo "PASS: Account state consistent across validators at matching seqnos"
+    fi
+else
+    echo "No validators share the same seqno — skipping account state comparison"
+fi
+
 # --- Build details JSON ---
 
 DETAILS=$(jq -cn \
@@ -275,11 +401,18 @@ DETAILS=$(jq -cn \
     --argjson v1_hb_age "${FINAL_HB_AGES[0]}" \
     --argjson v2_hb_age "${FINAL_HB_AGES[1]}" \
     --argjson v3_hb_age "${FINAL_HB_AGES[2]}" \
+    --argjson account_lt_consistent "$([ "${ACCOUNT_LT_CONSISTENT}" = "true" ] && echo true || echo false)" \
+    --arg account_mismatch "${ACCOUNT_MISMATCH_DETAIL}" \
+    --arg v1_trans_lt "${V1_TRANS_LT}" \
+    --arg v2_trans_lt "${V2_TRANS_LT}" \
+    --arg v3_trans_lt "${V3_TRANS_LT}" \
     '{v1_block_id: $v1, v2_block_id: $v2, v3_block_id: $v3,
       responded: $responded, min_seqno: $min_seqno, max_seqno: $max_seqno,
       seqno_diff: $seqno_diff, seqno_tolerance: $seqno_tolerance,
       converged: $converged, mismatch: $mismatch,
-      v1_heartbeat_age_s: $v1_hb_age, v2_heartbeat_age_s: $v2_hb_age, v3_heartbeat_age_s: $v3_hb_age}')
+      v1_heartbeat_age_s: $v1_hb_age, v2_heartbeat_age_s: $v2_hb_age, v3_heartbeat_age_s: $v3_hb_age,
+      account_lt_consistent: $account_lt_consistent, account_mismatch: $account_mismatch,
+      v1_trans_lt: $v1_trans_lt, v2_trans_lt: $v2_trans_lt, v3_trans_lt: $v3_trans_lt}')
 
 # --- Emit assertions ---
 
@@ -295,6 +428,21 @@ if [ "${CONVERGED}" = "true" ]; then
 else
     echo "FAIL: Validators did NOT converge — ${MISMATCH_DETAIL}"
     sdk_always false "${ALWAYS_NAME}" "${DETAILS}"
+fi
+
+# Emit account state consistency assertion (independent of block ID convergence)
+if [ "${ACCOUNT_STATE_CHECKED}" = "true" ]; then
+    if [ "${ACCOUNT_LT_CONSISTENT}" = "true" ]; then
+        sdk_always true "${ACCOUNT_STATE_ALWAYS}" "${DETAILS}"
+    else
+        echo "FAIL: Account state inconsistent — ${ACCOUNT_MISMATCH_DETAIL}"
+        sdk_always false "${ACCOUNT_STATE_ALWAYS}" "${DETAILS}"
+        exit 1
+    fi
+fi
+
+# Exit with failure if block convergence failed (after emitting all assertions)
+if [ "${CONVERGED}" != "true" ]; then
     exit 1
 fi
 
