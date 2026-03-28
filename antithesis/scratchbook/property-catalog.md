@@ -267,7 +267,7 @@ Antithesis assertions are embedded inline in `collator.cpp` to cover the block C
 |---|---|
 | **Type** | Safety (Always) |
 | **Property** | The validator's TCP socket count does not monotonically increase over consecutive readings |
-| **Invariant** | `ALWAYS(!monotonic_growth OR growth < 50, "Validator socket count is not monotonically growing")` — evaluated over last 5 heartbeat readings |
+| **Invariant** | `ALWAYS(!monotonic_growth OR growth < 50, "Validator socket count is not monotonically growing")` — evaluated over last 5 heartbeat readings; monotonic growth check is skipped during the first 60s after validator startup (grace period for initial connection ramp) |
 | **Antithesis Angle** | Fault injection may trigger connection leaks if cleanup paths are missed |
 | **Why It Matters** | Detects socket/connection leaks distinct from FD leaks — socket exhaustion can occur before FD limits |
 | **Workload** | `parallel_driver_sock_growth.sh` — trajectory analysis over `/shared/validator_sock_history` |

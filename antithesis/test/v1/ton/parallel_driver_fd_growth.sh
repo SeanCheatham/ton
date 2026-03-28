@@ -14,6 +14,7 @@ VALIDATOR_HOST="${VALIDATOR_HOST:-ton-validator}"
 MIN_ENTRIES=5
 GROWTH_THRESHOLD=100
 HEARTBEAT_MAX_AGE=60
+STARTUP_GRACE=60          # seconds after startup to ignore monotonic growth (startup FD ramp)
 
 # Use heartbeat-only precondition instead of all-3-ports.
 # Under fault injection, all 3 ports are rarely up simultaneously for the
@@ -52,12 +53,15 @@ if [ ${#ENTRIES[@]} -lt "$MIN_ENTRIES" ]; then
     exit 0
 fi
 
-# Extract FD count values
+# Extract timestamps and FD count values
 FD_VALUES=()
+ENTRY_TIMESTAMPS=()
 for entry in "${ENTRIES[@]}"; do
+    ts="${entry%%:*}"
     val="${entry#*:}"
     if [[ "$val" =~ ^[0-9]+$ ]]; then
         FD_VALUES+=("$val")
+        ENTRY_TIMESTAMPS+=("$ts")
     fi
 done
 
@@ -79,7 +83,34 @@ FIRST_FD="${FD_VALUES[0]}"
 LAST_FD="${FD_VALUES[$((${#FD_VALUES[@]}-1))]}"
 GROWTH=$((LAST_FD - FIRST_FD))
 
-if [ "$MONOTONIC" = "true" ] && [ "$GROWTH" -gt "$GROWTH_THRESHOLD" ]; then
+# Startup grace: if the oldest reading in our window is within STARTUP_GRACE
+# seconds of the validator start, skip the monotonic growth check.
+# During startup the validator opens RocksDB, peer connections, etc., causing
+# a legitimate FD ramp from ~0 to ~130.
+IN_STARTUP_GRACE=false
+if [ -f /shared/validator_startup_id ]; then
+    STARTUP_NS=$(cat /shared/validator_startup_id 2>/dev/null || true)
+    STARTUP_NS=$(echo "$STARTUP_NS" | tr -d '[:space:]')
+    if [[ "$STARTUP_NS" =~ ^[0-9]+$ ]] && [ "${#ENTRY_TIMESTAMPS[@]}" -gt 0 ]; then
+        STARTUP_S=$((STARTUP_NS / 1000000000))
+        OLDEST_TS="${ENTRY_TIMESTAMPS[0]}"
+        if [[ "$OLDEST_TS" =~ ^[0-9]+$ ]]; then
+            SINCE_STARTUP=$((OLDEST_TS - STARTUP_S))
+            if [ "$SINCE_STARTUP" -lt "$STARTUP_GRACE" ]; then
+                IN_STARTUP_GRACE=true
+            fi
+        fi
+    fi
+fi
+
+if [ "$IN_STARTUP_GRACE" = "true" ] && [ "$MONOTONIC" = "true" ] && [ "$GROWTH" -gt "$GROWTH_THRESHOLD" ]; then
+    echo "PASS (startup grace): FD growth=${GROWTH} monotonic=${MONOTONIC} but within ${STARTUP_GRACE}s of startup — expected ramp"
+    DETAILS=$(jq -cn --argjson first "$FIRST_FD" --argjson last "$LAST_FD" \
+        --argjson growth "$GROWTH" --argjson threshold "$GROWTH_THRESHOLD" \
+        --argjson count "${#FD_VALUES[@]}" \
+        '{first_fd: $first, last_fd: $last, growth: $growth, threshold: $threshold, readings: $count, monotonic: true, startup_grace: true}')
+    sdk_always true "$ASSERTION_NAME" "$DETAILS"
+elif [ "$MONOTONIC" = "true" ] && [ "$GROWTH" -gt "$GROWTH_THRESHOLD" ]; then
     echo "FAIL: FD count monotonically increasing over ${MIN_ENTRIES} readings, growth=${GROWTH} (>${GROWTH_THRESHOLD} threshold)"
     DETAILS=$(jq -cn --argjson first "$FIRST_FD" --argjson last "$LAST_FD" \
         --argjson growth "$GROWTH" --argjson threshold "$GROWTH_THRESHOLD" \
