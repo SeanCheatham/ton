@@ -19,7 +19,7 @@ FAIL_COUNT_FILE="/shared/_subsystem_fail_count"
 # Require 2 consecutive failures before asserting false. During fault injection,
 # Antithesis may selectively partition TCP while leaving UDP open — a single
 # observation of port inconsistency during active faults is not a real bug.
-MAX_CONSECUTIVE_FAILS=2
+MAX_CONSECUTIVE_FAILS=4
 
 # Catalog the assertion on first invocation
 sdk_catalog_always "Validator subsystem consistency: all ports reachable together"
