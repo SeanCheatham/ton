@@ -61,7 +61,7 @@ The Antithesis C++ SDK (`third-party/antithesis-sdk-cpp/`) is now linked to the 
 - `validator/CMakeLists.txt`: Linked `antithesis-sdk-cpp` to `validator`
 - `validator/impl/CMakeLists.txt`: Linked `antithesis-sdk-cpp` to `ton_validator`
 
-These in-process assertions complement the external workload-based assertions (131 catalog entries in `entrypoint-workload.sh`).
+These in-process assertions complement the external workload-based assertions (137 catalog entries in `entrypoint-workload.sh`).
 
 ## In-Process C++ SDK Assertions (validator/impl/validate-query.cpp)
 
@@ -384,6 +384,19 @@ Antithesis assertions are embedded inline in `collator.cpp` to cover the block C
 | **Workload** | `finally_consensus_converged.sh` — queries `lite-client -c "last"` from all 3 validators' liteservers, compares full block ID strings `(-1,8000000000000000,N):ROOTHASH:FILEHASH` |
 | **Secondary** | `SOMETIMES(all_3_match, "Consensus convergence verified across all validators")` — emitted when all 3 validators responded with identical masterchain state (seqno diff = 0) |
 | **Skip Conditions** | Fewer than 2 validators reachable, lite-client unavailable, liteserver configs missing |
+| **Status** | ✅ Implemented |
+
+### Validator Survives Malformed BOC Submissions
+
+| | |
+|---|---|
+| **Type** | Safety (Always) |
+| **Property** | The validator survives intentionally malformed BOC file submissions (truncated, random bytes, wrong magic) without crashing or becoming unresponsive |
+| **Invariant** | `ALWAYS(survived, "Validator survives malformed BOC submissions")` — evaluated after submitting 3 types of malformed BOCs via lite-client `sendfile` |
+| **Antithesis Angle** | Fault injection combined with malformed input may trigger edge cases in the validator's BOC parsing that cause crashes or state corruption |
+| **Why It Matters** | Input validation is critical — a validator that crashes on malformed transactions is vulnerable to denial-of-service attacks. All other workloads send valid inputs; this is the first to test invalid input handling |
+| **Workload** | `parallel_driver_malformed_boc.sh` — generates truncated BOC, random bytes, and wrong-magic BOC, submits each via `sendfile`, then verifies validator liveness |
+| **Secondary** | `SOMETIMES(true, "Malformed BOC gracefully rejected")` — emitted when at least one malformed BOC was submitted and the validator stayed healthy |
 | **Status** | ✅ Implemented |
 
 ## Future Properties (for antithesis-workload)

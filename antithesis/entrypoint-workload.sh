@@ -188,6 +188,8 @@ sdk_catalog_always "All validators converged to same masterchain state at end of
 sdk_catalog_sometimes "Consensus convergence verified across all validators"
 sdk_catalog_sometimes "Consensus recovered after fault"
 sdk_catalog_sometimes "Liteserver getblock query returned valid data"
+sdk_catalog_always "Validator survives malformed BOC submissions"
+sdk_catalog_sometimes "Malformed BOC gracefully rejected"
 echo "Assertion catalog emitted."
 
 # Signal that setup is complete
