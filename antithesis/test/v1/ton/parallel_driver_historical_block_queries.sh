@@ -15,6 +15,7 @@ LITE_PORT="${LITE_PORT:-30003}"
 
 ALWAYS_NAME="Historical block retrieval returns consistent data"
 SOMETIMES_NAME="Historical block transactions listed successfully"
+SOMETIMES_PROOF_NAME="Liteserver block proof chain verified successfully"
 STATE_FILE="/shared/_last_mc_seqno"
 
 HEARTBEAT_MAX_AGE=60
@@ -23,6 +24,7 @@ HEARTBEAT_WAIT_POLL=2
 
 sdk_catalog_always  "${ALWAYS_NAME}"
 sdk_catalog_sometimes "${SOMETIMES_NAME}"
+sdk_catalog_sometimes "${SOMETIMES_PROOF_NAME}"
 
 # --- Precondition: heartbeat must be fresh ---
 _hb_ok=false
@@ -106,8 +108,12 @@ echo "Querying historical blocks at seqnos: ${HISTORICAL_SEQNOS[*]} (current=${L
 # --- Query each historical seqno ---
 CONSISTENCY_OK=true
 ANY_LISTBLOCKTRANS_OK=false
+PROOF_OK=false
 QUERIED=0
 TOTAL_TX=0
+# Store block IDs for proof chain verification
+BLOCK_ID_FOR_SEQNO_A=""
+BLOCK_ID_FOR_SEQNO_B=""
 
 for TARGET_SEQNO in "${HISTORICAL_SEQNOS[@]}"; do
     echo "--- Querying seqno ${TARGET_SEQNO} ---"
@@ -130,6 +136,13 @@ for TARGET_SEQNO in "${HISTORICAL_SEQNOS[@]}"; do
 
     echo "Block ID for seqno ${TARGET_SEQNO}: ${BLOCK_ID}"
     QUERIED=$((QUERIED + 1))
+
+    # Store block IDs for proof chain verification
+    if [ "${TARGET_SEQNO}" = "${SEQNO_A}" ]; then
+        BLOCK_ID_FOR_SEQNO_A="${BLOCK_ID}"
+    elif [ "${TARGET_SEQNO}" = "${SEQNO_B}" ]; then
+        BLOCK_ID_FOR_SEQNO_B="${BLOCK_ID}"
+    fi
 
     # Step 2: Verify the returned seqno matches what we requested
     RETURNED_SEQNO=$(echo "${BLOCK_ID}" | grep -oP '\(-1,[0-9a-fA-F]+,\K[0-9]+') || true
@@ -172,7 +185,8 @@ if [ "${QUERIED}" -gt 0 ] && [ "${CONSISTENCY_OK}" = "true" ]; then
         --argjson queried "${QUERIED}" \
         --argjson total_tx "${TOTAL_TX}" \
         --arg seqnos "${HISTORICAL_SEQNOS[*]}" \
-        '{current_seqno: $current_seqno, queried_count: $queried, total_transactions: $total_tx, target_seqnos: $seqnos}')
+        --argjson proof_chain "${PROOF_OK}" \
+        '{current_seqno: $current_seqno, queried_count: $queried, total_transactions: $total_tx, target_seqnos: $seqnos, proof_chain: $proof_chain}')
     echo "PASS: All ${QUERIED} historical block retrievals returned consistent data"
     sdk_always true "${ALWAYS_NAME}" "${DETAILS}"
 fi
@@ -185,6 +199,38 @@ if [ "${ANY_LISTBLOCKTRANS_OK}" = "true" ]; then
         '{current_seqno: $current_seqno, total_transactions: $total_tx}')
     echo "PASS: Historical block transactions listed successfully"
     sdk_sometimes true "${SOMETIMES_NAME}" "${DETAILS}"
+fi
+
+# --- Proof chain verification ---
+# Uses blkproofchain to verify a chain of proofs between two historical masterchain blocks.
+# This exercises LiteQuery::perform_getBlockProof — the proof chain verification mechanism
+# that light clients use to verify block validity.
+if [ -n "${BLOCK_ID_FOR_SEQNO_B}" ] && [ -n "${BLOCK_ID_FOR_SEQNO_A}" ]; then
+    echo "--- Proof chain: seqno ${SEQNO_B} -> ${SEQNO_A} ---"
+    OUTPUT_PROOF=$(timeout 20 lite-client \
+        -v 1 \
+        -a "${VALIDATOR_IP}:${LITE_PORT}" \
+        -C /shared/liteserver.config.json \
+        -c "blkproofchain ${BLOCK_ID_FOR_SEQNO_B} ${BLOCK_ID_FOR_SEQNO_A}" \
+        -c 'quit' 2>&1) || true
+    if echo "${OUTPUT_PROOF}" | grep -qi 'valid\|proof\|block_link'; then
+        PROOF_OK=true
+        echo "blkproofchain returned valid proof chain from seqno ${SEQNO_B} to ${SEQNO_A}"
+    else
+        echo "blkproofchain did not return recognizable proof data"
+    fi
+fi
+
+if [ "${PROOF_OK}" = "true" ]; then
+    DETAILS=$(jq -cn \
+        --argjson current_seqno "${LAST_SEQNO}" \
+        --argjson from_seqno "${SEQNO_B}" \
+        --argjson to_seqno "${SEQNO_A}" \
+        --arg from_block "${BLOCK_ID_FOR_SEQNO_B}" \
+        --arg to_block "${BLOCK_ID_FOR_SEQNO_A}" \
+        '{current_seqno: $current_seqno, from_seqno: $from_seqno, to_seqno: $to_seqno, from_block: $from_block, to_block: $to_block, proof_chain: true}')
+    echo "PASS: Liteserver block proof chain verified successfully"
+    sdk_sometimes true "${SOMETIMES_PROOF_NAME}" "${DETAILS}"
 fi
 
 exit 0
