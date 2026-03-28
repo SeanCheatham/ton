@@ -117,6 +117,7 @@ DETAILS=$(jq -cn \
 
 if [ "${NEW_SEQNO}" -gt "${SEQNO}" ]; then
     echo "PASS: transfer completed (seqno ${SEQNO} -> ${NEW_SEQNO})"
+    echo "${NEW_SEQNO}" > /shared/tx/last_confirmed_seqno
     sdk_sometimes true "${ASSERTION_NAME}" "${DETAILS}"
 else
     echo "Transfer not yet confirmed (seqno still ${SEQNO})"

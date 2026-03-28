@@ -61,7 +61,7 @@ The Antithesis C++ SDK (`third-party/antithesis-sdk-cpp/`) is now linked to the 
 - `validator/CMakeLists.txt`: Linked `antithesis-sdk-cpp` to `validator`
 - `validator/impl/CMakeLists.txt`: Linked `antithesis-sdk-cpp` to `ton_validator`
 
-These in-process assertions complement the 97 existing external workload-based assertions.
+These in-process assertions complement the 99 existing external workload-based assertions.
 
 ## In-Process C++ SDK Assertions (validator/impl/validate-query.cpp)
 
@@ -247,6 +247,30 @@ Antithesis assertions are embedded inline in `collator.cpp` to cover the block C
 | **Antithesis Angle** | Fault injection may cause resource exhaustion leading to socket backlog overflow and mass connection rejection |
 | **Why It Matters** | High reset rates indicate the validator is rejecting connections — distinct from retransmissions (packet loss) and connection failures (establishment errors). Completes the TCP L4 health monitoring triad |
 | **Workload** | `parallel_driver_tcp_outrsts.sh` — reads `/shared/validator_tcp_outrsts` written by validator heartbeat loop |
+| **Status** | ✅ Implemented |
+
+### Cross-Validator Account State Is Consistent After Transfer
+
+| | |
+|---|---|
+| **Type** | Liveness (Sometimes) |
+| **Property** | After a confirmed transfer, all responding validators agree on the genesis wallet's seqno and balance |
+| **Invariant** | `SOMETIMES(seqno_agree && bal_agree && responded >= 2, "Cross-validator account state is consistent after transfer")` — evaluated only when at least 2 validators respond |
+| **Antithesis Angle** | Fault injection may cause state replication lag or split-brain scenarios where validators diverge on account state |
+| **Why It Matters** | L2 data consistency — goes beyond masterchain seqno agreement (L1) to verify that actual account data (seqno, balance) is consistent across validators after a transfer |
+| **Workload** | `serial_driver_verify_transfer_across_validators.sh` — queries wallet seqno via `runmethod 85143` and balance via `getaccount` from all 3 liteservers |
+| **Status** | ✅ Implemented |
+
+### Cross-Validator Wallet Seqno Divergence Is Bounded
+
+| | |
+|---|---|
+| **Type** | Safety (Always) |
+| **Property** | Wallet seqnos reported by different validators never diverge by more than 1 |
+| **Invariant** | `ALWAYS(max_seqno_diff <= 1, "Cross-validator wallet seqno divergence is bounded")` — evaluated when at least 2 validators respond with valid seqnos |
+| **Antithesis Angle** | Fault injection may cause replication failures leading to split-brain where validators have fundamentally different state |
+| **Why It Matters** | Catches split-brain scenarios — seqno divergence > 1 indicates state replication is broken, not merely delayed |
+| **Workload** | `serial_driver_verify_transfer_across_validators.sh` — same workload as above, emits this Always guard alongside the Sometimes assertion |
 | **Status** | ✅ Implemented |
 
 ## Future Properties (for antithesis-workload)
