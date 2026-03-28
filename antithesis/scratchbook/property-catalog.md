@@ -286,6 +286,18 @@ Antithesis assertions are embedded inline in `collator.cpp` to cover the block C
 | **Secondary** | `SOMETIMES(advancing_during_faults, "Masterchain height observed advancing during faults")` — emitted when height advances while heartbeat is stale (>30s), creating a branch point for fault+progress exploration |
 | **Status** | ✅ Implemented |
 
+### Consensus Recovered After Fault
+
+| | |
+|---|---|
+| **Type** | Liveness (Sometimes) |
+| **Property** | After a detected fault (liteserver query failure or stale heartbeat >60s), block production resumes with a seqno higher than the last pre-fault seqno |
+| **Invariant** | `SOMETIMES(current_seqno > last_good_seqno, "Consensus recovered after fault")` — evaluated only when a prior fault was recorded and liteserver now responds |
+| **Antithesis Angle** | Creates a branch point at fault detection moments — amplifying bug-finding in recovery paths, consensus re-establishment, and state sync after interruption |
+| **Why It Matters** | DATA-level recovery — a validator can have ports up but consensus stalled. This complements port-level recovery (`parallel_driver_recovery_observed.sh`) and unconditional height advancement (`eventually_block_height_advances.sh`) |
+| **Workload** | `eventually_consensus_recovers.sh` — two-phase state machine persisted in `/shared/_consensus_recovery_state` |
+| **Status** | ✅ Implemented |
+
 ## Future Properties (for antithesis-workload)
 
 ### 2. Validator Engine Does Not Crash
