@@ -92,6 +92,7 @@ BLOCK_ID=""
 GETBLOCK_OK=false
 GETHEADER_OK=false
 GETSTATE_OK=false
+GETCONFIG_OK=false
 
 # Parse full block ID from `last` output: (-1,8000000000000000,N):ROOTHASH:FILEHASH
 BLOCK_ID=$(echo "${OUTPUT}" | grep -oE '\(-1,[0-9a-fA-F]+,[0-9]+\):[0-9A-Fa-f]+:[0-9A-Fa-f]+' | head -1) || true
@@ -139,6 +140,28 @@ if [ -n "${BLOCK_ID}" ]; then
             echo "getstate returned data"
         fi
     fi
+
+    # --- Third batch: config queries ---
+    # Exercises LiteQuery::perform_getConfigParams (liteserver.cpp)
+    # Params: 0=config contract addr, 1=elector addr, 15=election params, 30=consensus params
+    GETCONFIG_OK=false
+    OUTPUT4=$(timeout 15 lite-client \
+        -v 1 \
+        -a "${VALIDATOR_IP}:${LITE_PORT}" \
+        -C /shared/liteserver.config.json \
+        -c "getconfig 0" \
+        -c "getconfig 1" \
+        -c "getconfig 15" \
+        -c "getconfig 30" \
+        -c 'quit' 2>&1) || true
+
+    echo "Config queries response: ${#OUTPUT4} chars"
+    echo "${OUTPUT4:0:500}"
+
+    if echo "${OUTPUT4}" | grep -qi 'ConfigParam'; then
+        GETCONFIG_OK=true
+        echo "getconfig returned valid config params"
+    fi
 else
     echo "Could not parse block ID from last output, skipping getblock/getblockheader"
 fi
@@ -150,8 +173,9 @@ DETAILS=$(jq -cn \
     --argjson getblock "${GETBLOCK_OK}" \
     --argjson getheader "${GETHEADER_OK}" \
     --argjson getstate "${GETSTATE_OK}" \
+    --argjson getconfig "${GETCONFIG_OK}" \
     --arg block_id "${BLOCK_ID}" \
-    '{output_length: $output_len, resolved_ip: $ip, getblock: $getblock, getblockheader: $getheader, getstate: $getstate, block_id: $block_id}')
+    '{output_length: $output_len, resolved_ip: $ip, getblock: $getblock, getblockheader: $getheader, getstate: $getstate, getconfig: $getconfig, block_id: $block_id}')
 
 if [ "${OUTPUT_LEN}" -gt 0 ]; then
     echo "PASS: liteserver responded to diverse queries"
