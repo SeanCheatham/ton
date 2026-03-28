@@ -335,6 +335,30 @@ Antithesis assertions are embedded inline in `collator.cpp` to cover the block C
 | **Workload** | `serial_driver_send_transfer.sh` — same workload as above, emitted alongside the Always assertion when balance is consistent |
 | **Status** | ✅ Implemented |
 
+### Duplicate Transfer BOC Is Correctly Rejected
+
+| | |
+|---|---|
+| **Type** | Safety (Always) |
+| **Property** | Re-sending a consumed transfer BOC (seqno=N after the contract advanced to N+1) must not advance the seqno again |
+| **Invariant** | `ALWAYS(after_replay_seqno == after_transfer_seqno, "Duplicate transfer BOC is correctly rejected")` — evaluated after re-sending the same BOC that just succeeded |
+| **Antithesis Angle** | Fault injection (network delays, reordering, duplicate delivery) creates exactly the conditions where replay bugs surface |
+| **Why It Matters** | Replay attacks are one of the most dangerous blockchain vulnerabilities — if a signed transaction can be replayed after consumption, funds can be drained |
+| **Workload** | `serial_driver_send_transfer.sh` — after a confirmed transfer, re-sends the same BOC file, waits 3s, re-queries seqno, and asserts it has not advanced |
+| **Status** | ✅ Implemented |
+
+### Transfer Replay Rejection Verified
+
+| | |
+|---|---|
+| **Type** | Liveness (Sometimes) |
+| **Property** | The replay protection test ran and passed at least once |
+| **Invariant** | `SOMETIMES(true, "Transfer replay rejection verified")` — emitted when the replay test executes and the seqno correctly remains unchanged |
+| **Antithesis Angle** | Creates a branch point at replay-test moments, guiding exploration toward duplicate-delivery scenarios |
+| **Why It Matters** | Confirms the replay protection check is actually being exercised — complements the Always guard by proving the test ran |
+| **Workload** | `serial_driver_send_transfer.sh` — same workload as above, emitted alongside the Always assertion when replay is rejected |
+| **Status** | ✅ Implemented |
+
 ### All Acknowledged Transfers Persist in Final State
 
 | | |

@@ -13,12 +13,16 @@ LITE_PORT="${LITE_PORT:-30003}"
 ASSERTION_NAME="A TON transfer completed successfully"
 BALANCE_ALWAYS_NAME="Wallet balance is consistent between transfer invocations"
 BALANCE_SOMETIMES_NAME="Transfer read-back balance verified"
+REPLAY_ALWAYS_NAME="Duplicate transfer BOC is correctly rejected"
+REPLAY_SOMETIMES_NAME="Transfer replay rejection verified"
 HEARTBEAT_MAX_AGE=60
 BALANCE_FILE="/shared/tx/last_confirmed_balance"
 
 sdk_catalog_sometimes "${ASSERTION_NAME}"
 sdk_catalog_always "${BALANCE_ALWAYS_NAME}"
 sdk_catalog_sometimes "${BALANCE_SOMETIMES_NAME}"
+sdk_catalog_always "${REPLAY_ALWAYS_NAME}"
+sdk_catalog_sometimes "${REPLAY_SOMETIMES_NAME}"
 
 # Precondition: heartbeat must be fresh
 if [ ! -f /shared/validator_heartbeat ]; then
@@ -170,6 +174,38 @@ if [ "${NEW_SEQNO}" -gt "${SEQNO}" ]; then
     if [ -n "${POST_BALANCE}" ] && [[ "${POST_BALANCE}" =~ ^[0-9]+$ ]]; then
         echo "${POST_BALANCE}" > "${BALANCE_FILE}"
         echo "Recorded post-transfer balance: ${POST_BALANCE}"
+    fi
+
+    # Replay protection test: re-send the SAME BOC (seqno=N, but contract now expects N+1)
+    echo "Replay test: re-sending consumed BOC for seqno ${SEQNO}..."
+    REPLAY_OUTPUT=$(timeout 10 lite-client \
+        -v 1 \
+        -a "${VALIDATOR_IP}:${LITE_PORT}" \
+        -C /shared/liteserver.config.json \
+        -c "sendfile ${BOC_FILE}" \
+        -c 'quit' 2>&1) || true
+    echo "Replay send output: ${REPLAY_OUTPUT:0:300}"
+
+    sleep 3
+
+    echo "Replay test: re-querying wallet seqno..."
+    REPLAY_SEQNO=$(get_wallet_seqno)
+    if [ -n "${REPLAY_SEQNO}" ] && [[ "${REPLAY_SEQNO}" =~ ^[0-9]+$ ]]; then
+        REPLAY_DETAILS=$(jq -cn \
+            --argjson original "${SEQNO}" \
+            --argjson after_transfer "${NEW_SEQNO}" \
+            --argjson after_replay "${REPLAY_SEQNO}" \
+            '{original_seqno: $original, after_transfer: $after_transfer, after_replay: $after_replay}')
+        if [ "${REPLAY_SEQNO}" -eq "${NEW_SEQNO}" ]; then
+            echo "PASS: replay correctly rejected (seqno still ${NEW_SEQNO})"
+            sdk_always true "${REPLAY_ALWAYS_NAME}" "${REPLAY_DETAILS}"
+            sdk_sometimes true "${REPLAY_SOMETIMES_NAME}" "${REPLAY_DETAILS}"
+        else
+            echo "FAIL: replay protection failed! seqno advanced to ${REPLAY_SEQNO}"
+            sdk_always false "${REPLAY_ALWAYS_NAME}" "${REPLAY_DETAILS}"
+        fi
+    else
+        echo "Could not query seqno after replay test, skipping replay assertion"
     fi
 else
     echo "Transfer not yet confirmed (seqno still ${SEQNO})"
