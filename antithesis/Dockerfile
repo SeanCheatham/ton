@@ -36,15 +36,22 @@ COPY ./ ./
 RUN test -f /ton/third-party/openssl/Configure || \
     (echo "ERROR: submodules not initialized. Run: git submodule update --init --recursive" && exit 1)
 
+# Pre-compile Antithesis coverage callbacks into a reusable object so every
+# executable gets the __sanitizer_cov_trace_pc_guard implementation.
+RUN echo '#include "antithesis_instrumentation.h"' | \
+    clang++-21 -std=c++20 -c -I/ton/third-party/antithesis-sdk-cpp \
+    -o /ton/antithesis_instrumentation.o -xc++ -
+
 RUN --mount=type=cache,target=/ton/build \
     --mount=type=cache,target=/ccache \
     cd /ton/build && \
     cmake -GNinja -DCMAKE_BUILD_TYPE=Release -DPORTABLE=1 -DTON_ARCH= -DTON_USE_JEMALLOC=ON \
+          -DMEMPROF=ON \
           -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
-          -DCMAKE_C_FLAGS="-flto=thin -fsanitize-coverage=trace-pc-guard -g" \
-          -DCMAKE_CXX_FLAGS="-flto=thin -fsanitize-coverage=trace-pc-guard -g" \
-          -DCMAKE_EXE_LINKER_FLAGS="-flto=thin -fuse-ld=lld -Wl,--build-id" \
-          -DCMAKE_SHARED_LINKER_FLAGS="-flto=thin -fuse-ld=lld -Wl,--build-id" .. && \
+          -DCMAKE_C_FLAGS="-fsanitize-coverage=trace-pc-guard -g" \
+          -DCMAKE_CXX_FLAGS="-fsanitize-coverage=trace-pc-guard -g" \
+          -DCMAKE_EXE_LINKER_FLAGS="-fuse-ld=lld -Wl,--build-id /ton/antithesis_instrumentation.o" \
+          -DCMAKE_SHARED_LINKER_FLAGS="-fuse-ld=lld -Wl,--build-id" .. && \
     ninja validator-engine generate-random-id lite-client func create-state gen_fif && \
     mkdir -p /build-out && \
     cp validator-engine/validator-engine utils/generate-random-id lite-client/lite-client \
