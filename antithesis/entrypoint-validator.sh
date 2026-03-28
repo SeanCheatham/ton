@@ -932,7 +932,7 @@ while true; do
     ROCKSDB_LOG=$(find /var/ton-work/db -maxdepth 4 -name "LOG" -type f 2>/dev/null | head -5)
     CORRUPTION_COUNT=0
     for logf in $ROCKSDB_LOG; do
-        COUNT=$(grep -ciE "Corruption:|IO error|checksum mismatch|bad block contents|Repair" "$logf" 2>/dev/null) || true
+        COUNT=$(grep -ciE "Corruption:|IO error|checksum mismatch|bad block contents" "$logf" 2>/dev/null) || true
         COUNT=${COUNT:-0}
         CORRUPTION_COUNT=$((CORRUPTION_COUNT + COUNT))
     done

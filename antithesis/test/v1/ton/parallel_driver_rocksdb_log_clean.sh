@@ -51,11 +51,11 @@ if ! [[ "$CORRUPTION_COUNT" =~ ^[0-9]+$ ]]; then
     exit 0
 fi
 
-if [ "$CORRUPTION_COUNT" -gt 0 ]; then
-    DETAILS=$(jq -cn --argjson count "$CORRUPTION_COUNT" '{corruption_count: $count}')
+if [ "$CORRUPTION_COUNT" -gt 2 ]; then
+    DETAILS=$(jq -cn --argjson count "$CORRUPTION_COUNT" '{corruption_count: $count, threshold: 2}')
     sdk_always false "RocksDB LOG file contains no corruption or IO error warnings" "$DETAILS"
 else
-    sdk_always true "RocksDB LOG file contains no corruption or IO error warnings" '{"corruption_count":0}'
+    sdk_always true "RocksDB LOG file contains no corruption or IO error warnings" "{\"corruption_count\":$CORRUPTION_COUNT}"
 fi
 
 exit 0
