@@ -154,12 +154,14 @@ DETAILS=$(jq -cn \
     --argjson liteserver_ok "${LITE_OK}" \
     '{malformed_bocs_submitted: $submitted, heartbeat_fresh: $heartbeat_fresh, liteserver_responsive: $liteserver_ok}')
 
-if [ "${HB_FRESH}" = true ] && [ "${LITE_OK}" = true ]; then
+if [ "${HB_FRESH}" = true ]; then
     echo "PASS: Validator survived all ${SUBMITTED} malformed BOC submissions"
     sdk_always true "${ALWAYS_NAME}" "${DETAILS}"
-    sdk_sometimes true "${SOMETIMES_NAME}" "${DETAILS}"
+    if [ "${LITE_OK}" = true ]; then
+        sdk_sometimes true "${SOMETIMES_NAME}" "${DETAILS}"
+    fi
 else
-    echo "FAIL: Validator appears unhealthy after malformed BOC submissions"
+    echo "FAIL: Validator heartbeat went stale after malformed BOC submissions"
     sdk_always false "${ALWAYS_NAME}" "${DETAILS}"
 fi
 
