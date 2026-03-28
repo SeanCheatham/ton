@@ -61,7 +61,7 @@ The Antithesis C++ SDK (`third-party/antithesis-sdk-cpp/`) is now linked to the 
 - `validator/CMakeLists.txt`: Linked `antithesis-sdk-cpp` to `validator`
 - `validator/impl/CMakeLists.txt`: Linked `antithesis-sdk-cpp` to `ton_validator`
 
-These in-process assertions complement the 99 existing external workload-based assertions.
+These in-process assertions complement the external workload-based assertions (131 catalog entries in `entrypoint-workload.sh`).
 
 ## In-Process C++ SDK Assertions (validator/impl/validate-query.cpp)
 
