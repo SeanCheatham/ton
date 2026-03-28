@@ -273,6 +273,19 @@ Antithesis assertions are embedded inline in `collator.cpp` to cover the block C
 | **Workload** | `serial_driver_verify_transfer_across_validators.sh` — same workload as above, emits this Always guard alongside the Sometimes assertion |
 | **Status** | ✅ Implemented |
 
+### Masterchain Block Height Is Monotonically Non-Decreasing
+
+| | |
+|---|---|
+| **Type** | Safety (Always) |
+| **Property** | Once a masterchain seqno has been observed, the validator must never serve a lower one |
+| **Invariant** | `ALWAYS(current_seqno >= previous_seqno, "Masterchain block height is monotonically non-decreasing")` — evaluated only when liteserver is reachable and query succeeds |
+| **Antithesis Angle** | Fault injection may trigger consensus rollback where a validator serves a lower seqno than previously observed |
+| **Why It Matters** | A seqno rollback is a consensus safety violation — the most critical class of blockchain bug. This is the first `anytime_` driver checking a blockchain data invariant (all prior `anytime_` scripts check infrastructure) |
+| **Workload** | `anytime_masterchain_height_monotonic.sh` — queries `lite-client -c "last"`, compares against `/shared/_last_mc_seqno` |
+| **Secondary** | `SOMETIMES(advancing_during_faults, "Masterchain height observed advancing during faults")` — emitted when height advances while heartbeat is stale (>30s), creating a branch point for fault+progress exploration |
+| **Status** | ✅ Implemented |
+
 ## Future Properties (for antithesis-workload)
 
 ### 2. Validator Engine Does Not Crash
