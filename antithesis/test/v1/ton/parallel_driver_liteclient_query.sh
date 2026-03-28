@@ -9,23 +9,38 @@ VALIDATOR_HOST="${VALIDATOR_HOST:-ton-validator}"
 LITE_PORT="${LITE_PORT:-30003}"
 ASSERTION_NAME="Lite-client can query validator and get a response"
 HEARTBEAT_MAX_AGE=60
+HEARTBEAT_WAIT_MAX=20   # seconds to wait for heartbeat to appear
+HEARTBEAT_WAIT_POLL=2   # seconds between retries
 
-# Precondition: heartbeat must be fresh
-if [ -f /shared/validator_heartbeat ]; then
-    HB_TS=$(cat /shared/validator_heartbeat 2>/dev/null || true)
-    HB_TS=$(echo "$HB_TS" | tr -d '[:space:]')
-    NOW=$(date +%s)
-    if [[ "$HB_TS" =~ ^[0-9]+$ ]]; then
-        AGE=$((NOW - HB_TS))
-        if [ "$AGE" -gt "$HEARTBEAT_MAX_AGE" ]; then
-            echo "Heartbeat stale (${AGE}s), skipping"
-            exit 0
+# Precondition: heartbeat must be fresh.
+# Instead of immediately skipping when the file is missing, retry briefly.
+# The validator's heartbeat loop may not have written its first entry yet,
+# especially during early parallel driver invocations after setup_complete.
+_hb_ok=false
+_hb_waited=0
+while [ "$_hb_waited" -lt "$HEARTBEAT_WAIT_MAX" ]; do
+    if [ -f /shared/validator_heartbeat ]; then
+        HB_TS=$(cat /shared/validator_heartbeat 2>/dev/null || true)
+        HB_TS=$(echo "$HB_TS" | tr -d '[:space:]')
+        NOW=$(date +%s)
+        if [[ "$HB_TS" =~ ^[0-9]+$ ]]; then
+            AGE=$((NOW - HB_TS))
+            if [ "$AGE" -le "$HEARTBEAT_MAX_AGE" ]; then
+                _hb_ok=true
+                break
+            else
+                echo "Heartbeat stale (${AGE}s), skipping"
+                exit 0
+            fi
         fi
-    else
-        echo "Heartbeat value invalid, skipping"; exit 0
     fi
-else
-    echo "Heartbeat file not present yet, skipping"; exit 0
+    sleep "$HEARTBEAT_WAIT_POLL"
+    _hb_waited=$((_hb_waited + HEARTBEAT_WAIT_POLL))
+done
+
+if [ "$_hb_ok" != "true" ]; then
+    echo "Heartbeat file not present after ${HEARTBEAT_WAIT_MAX}s, skipping"
+    exit 0
 fi
 
 # Precondition: TCP:30003 (liteserver) must be reachable
