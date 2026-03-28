@@ -929,7 +929,7 @@ while true; do
     date +%s > ${METRIC_PREFIX}_heartbeat
 
     # Scan RocksDB LOG files for corruption/IO error indicators
-    ROCKSDB_LOG=$(find /var/ton-work/db -maxdepth 2 -name "LOG" -type f 2>/dev/null | head -5)
+    ROCKSDB_LOG=$(find /var/ton-work/db -maxdepth 4 -name "LOG" -type f 2>/dev/null | head -5)
     CORRUPTION_COUNT=0
     for logf in $ROCKSDB_LOG; do
         COUNT=$(grep -ciE "Corruption:|IO error|checksum mismatch|bad block contents|Repair" "$logf" 2>/dev/null) || true
@@ -961,7 +961,7 @@ while true; do
     ROCKSDB_LOG_SIZE=0
     ROCKSDB_LOG_FILE="/var/ton-work/db/LOG"
     if [ ! -f "$ROCKSDB_LOG_FILE" ]; then
-        ROCKSDB_LOG_FILE=$(find /var/ton-work/db -maxdepth 2 -name "LOG" -type f 2>/dev/null | head -1)
+        ROCKSDB_LOG_FILE=$(find /var/ton-work/db -maxdepth 4 -name "LOG" -type f 2>/dev/null | head -1)
     fi
     if [ -n "$ROCKSDB_LOG_FILE" ] && [ -f "$ROCKSDB_LOG_FILE" ]; then
         ROCKSDB_LOG_SIZE=$(stat -c%s "$ROCKSDB_LOG_FILE" 2>/dev/null || echo "0")
@@ -970,7 +970,7 @@ while true; do
     # Write RocksDB compaction event count for compaction health monitoring
     COMPACTION_COUNT=0
     for logf in $ROCKSDB_LOG; do
-        COUNT=$(grep -ciE "compacted to:|Compaction.*@|Manual compaction" "$logf" 2>/dev/null) || true
+        COUNT=$(grep -ciE "compacted to:|Compaction.*@|Manual compaction|compaction_job|CompactFiles|CompactionJob|compaction_finished|compaction_started|Compacted.*=>" "$logf" 2>/dev/null) || true
         COUNT=${COUNT:-0}
         COMPACTION_COUNT=$((COMPACTION_COUNT + COUNT))
     done
