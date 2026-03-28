@@ -13,12 +13,14 @@ VALIDATOR_HOST="${VALIDATOR_HOST:-ton-validator}"
 LITE_PORT="${LITE_PORT:-30003}"
 ASSERTION_NAME="Liteserver handles diverse query types"
 GETBLOCK_ASSERTION="Liteserver getblock query returned valid data"
+LASTTRANS_ASSERTION="Liteserver transaction history query returned valid data"
 HEARTBEAT_MAX_AGE=60
 HEARTBEAT_WAIT_MAX=20   # seconds to wait for heartbeat to appear
 HEARTBEAT_WAIT_POLL=2   # seconds between retries
 
 sdk_catalog_sometimes "${ASSERTION_NAME}"
 sdk_catalog_sometimes "${GETBLOCK_ASSERTION}"
+sdk_catalog_sometimes "${LASTTRANS_ASSERTION}"
 
 # Precondition: heartbeat must be fresh.
 # Retry briefly instead of immediately skipping — the validator's heartbeat
@@ -166,6 +168,52 @@ else
     echo "Could not parse block ID from last output, skipping getblock/getblockheader"
 fi
 
+# --- Fourth batch: transaction history + shard info ---
+LASTTRANS_OK=false
+ALLSHARDS_OK=false
+
+# 1. Parse last_trans_lt and hash from getaccount output (already in OUTPUT variable)
+#    Format: "last transaction lt = <lt> hash = <hash>"
+TRANS_LT=$(echo "${OUTPUT}" | grep -oP 'last transaction lt = \K[0-9]+' | head -1) || true
+TRANS_HASH=$(echo "${OUTPUT}" | grep -oP 'hash = \K[0-9a-fA-F]{64}' | head -1) || true
+
+if [ -n "${TRANS_LT}" ] && [ -n "${TRANS_HASH}" ] && [ "${TRANS_LT}" != "0" ]; then
+    OUTPUT5=$(timeout 15 lite-client \
+        -v 1 \
+        -a "${VALIDATOR_IP}:${LITE_PORT}" \
+        -C /shared/liteserver.config.json \
+        -c "lasttrans ${WALLET_ADDR} ${TRANS_LT} ${TRANS_HASH} 5" \
+        -c 'quit' 2>&1) || true
+
+    echo "lasttrans response: ${#OUTPUT5} chars"
+    echo "${OUTPUT5:0:500}"
+
+    if echo "${OUTPUT5}" | grep -qi 'transaction #'; then
+        LASTTRANS_OK=true
+        echo "lasttrans returned transaction history"
+    fi
+else
+    echo "Skipping lasttrans: LT=${TRANS_LT:-empty}, no transactions yet"
+fi
+
+# 2. Query shard configuration using block ID from earlier
+if [ -n "${BLOCK_ID}" ]; then
+    OUTPUT6=$(timeout 15 lite-client \
+        -v 1 \
+        -a "${VALIDATOR_IP}:${LITE_PORT}" \
+        -C /shared/liteserver.config.json \
+        -c "allshards ${BLOCK_ID}" \
+        -c 'quit' 2>&1) || true
+
+    echo "allshards response: ${#OUTPUT6} chars"
+    echo "${OUTPUT6:0:500}"
+
+    if echo "${OUTPUT6}" | grep -qi 'shard'; then
+        ALLSHARDS_OK=true
+        echo "allshards returned shard configuration"
+    fi
+fi
+
 # --- Emit assertions ---
 DETAILS=$(jq -cn \
     --argjson output_len "${OUTPUT_LEN}" \
@@ -174,8 +222,10 @@ DETAILS=$(jq -cn \
     --argjson getheader "${GETHEADER_OK}" \
     --argjson getstate "${GETSTATE_OK}" \
     --argjson getconfig "${GETCONFIG_OK}" \
+    --argjson lasttrans "${LASTTRANS_OK}" \
+    --argjson allshards "${ALLSHARDS_OK}" \
     --arg block_id "${BLOCK_ID}" \
-    '{output_length: $output_len, resolved_ip: $ip, getblock: $getblock, getblockheader: $getheader, getstate: $getstate, getconfig: $getconfig, block_id: $block_id}')
+    '{output_length: $output_len, resolved_ip: $ip, getblock: $getblock, getblockheader: $getheader, getstate: $getstate, getconfig: $getconfig, lasttrans: $lasttrans, allshards: $allshards, block_id: $block_id}')
 
 if [ "${OUTPUT_LEN}" -gt 0 ]; then
     echo "PASS: liteserver responded to diverse queries"
@@ -190,6 +240,15 @@ if [ -n "${BLOCK_ID}" ]; then
         sdk_sometimes true "${GETBLOCK_ASSERTION}" "${DETAILS}"
     else
         sdk_sometimes false "${GETBLOCK_ASSERTION}" "${DETAILS}"
+    fi
+fi
+
+# Emit lasttrans assertion only when account had transactions (LT != 0)
+if [ -n "${TRANS_LT}" ] && [ "${TRANS_LT}" != "0" ]; then
+    if [ "${LASTTRANS_OK}" = "true" ]; then
+        sdk_sometimes true "${LASTTRANS_ASSERTION}" "${DETAILS}"
+    else
+        sdk_sometimes false "${LASTTRANS_ASSERTION}" "${DETAILS}"
     fi
 fi
 
