@@ -12,11 +12,13 @@ source "${SCRIPT_DIR}/helper_sdk.sh"
 VALIDATOR_HOST="${VALIDATOR_HOST:-ton-validator}"
 LITE_PORT="${LITE_PORT:-30003}"
 ASSERTION_NAME="Liteserver handles diverse query types"
+GETBLOCK_ASSERTION="Liteserver getblock query returned valid data"
 HEARTBEAT_MAX_AGE=60
 HEARTBEAT_WAIT_MAX=20   # seconds to wait for heartbeat to appear
 HEARTBEAT_WAIT_POLL=2   # seconds between retries
 
 sdk_catalog_sometimes "${ASSERTION_NAME}"
+sdk_catalog_sometimes "${GETBLOCK_ASSERTION}"
 
 # Precondition: heartbeat must be fresh.
 # Retry briefly instead of immediately skipping — the validator's heartbeat
@@ -85,10 +87,71 @@ OUTPUT_LEN=${#OUTPUT}
 echo "Liteserver response: ${OUTPUT_LEN} chars"
 echo "${OUTPUT:0:500}"
 
+# --- Second batch: getblock / getblockheader using block ID from `last` ---
+BLOCK_ID=""
+GETBLOCK_OK=false
+GETHEADER_OK=false
+GETSTATE_OK=false
+
+# Parse full block ID from `last` output: (-1,8000000000000000,N):ROOTHASH:FILEHASH
+BLOCK_ID=$(echo "${OUTPUT}" | grep -oE '\(-1,[0-9a-fA-F]+,[0-9]+\):[0-9A-Fa-f]+:[0-9A-Fa-f]+' | head -1) || true
+
+if [ -n "${BLOCK_ID}" ]; then
+    echo "Parsed block ID: ${BLOCK_ID}"
+
+    # Extract seqno for conditional getstate
+    SEQNO=$(echo "${BLOCK_ID}" | grep -oP '\(-1,[0-9a-fA-F]+,\K[0-9]+') || true
+
+    OUTPUT2=$(timeout 15 lite-client \
+        -v 1 \
+        -a "${VALIDATOR_IP}:${LITE_PORT}" \
+        -C /shared/liteserver.config.json \
+        -c "getblock ${BLOCK_ID}" \
+        -c "getblockheader ${BLOCK_ID}" \
+        -c 'quit' 2>&1) || true
+
+    echo "Block queries response: ${#OUTPUT2} chars"
+    echo "${OUTPUT2:0:500}"
+
+    # Check getblock success
+    if echo "${OUTPUT2}" | grep -qi 'block data'; then
+        GETBLOCK_OK=true
+        echo "getblock returned valid data"
+    fi
+
+    # Check getblockheader success
+    if echo "${OUTPUT2}" | grep -qi 'block header'; then
+        GETHEADER_OK=true
+        echo "getblockheader returned valid data"
+    fi
+
+    # Conditional getstate for low seqnos (heavy operation)
+    if [ -n "${SEQNO}" ] && [ "${SEQNO}" -le 50 ] 2>/dev/null; then
+        echo "Seqno ${SEQNO} is low, attempting getstate..."
+        OUTPUT3=$(timeout 20 lite-client \
+            -v 1 \
+            -a "${VALIDATOR_IP}:${LITE_PORT}" \
+            -C /shared/liteserver.config.json \
+            -c "getstate ${BLOCK_ID}" \
+            -c 'quit' 2>&1) || true
+        if echo "${OUTPUT3}" | grep -qi 'state'; then
+            GETSTATE_OK=true
+            echo "getstate returned data"
+        fi
+    fi
+else
+    echo "Could not parse block ID from last output, skipping getblock/getblockheader"
+fi
+
+# --- Emit assertions ---
 DETAILS=$(jq -cn \
     --argjson output_len "${OUTPUT_LEN}" \
     --arg ip "${VALIDATOR_IP}" \
-    '{output_length: $output_len, resolved_ip: $ip}')
+    --argjson getblock "${GETBLOCK_OK}" \
+    --argjson getheader "${GETHEADER_OK}" \
+    --argjson getstate "${GETSTATE_OK}" \
+    --arg block_id "${BLOCK_ID}" \
+    '{output_length: $output_len, resolved_ip: $ip, getblock: $getblock, getblockheader: $getheader, getstate: $getstate, block_id: $block_id}')
 
 if [ "${OUTPUT_LEN}" -gt 0 ]; then
     echo "PASS: liteserver responded to diverse queries"
@@ -96,6 +159,12 @@ if [ "${OUTPUT_LEN}" -gt 0 ]; then
 else
     echo "FAIL: no output from liteserver queries"
     sdk_sometimes false "${ASSERTION_NAME}" "${DETAILS}"
+fi
+
+if [ "${GETBLOCK_OK}" = "true" ]; then
+    sdk_sometimes true "${GETBLOCK_ASSERTION}" "${DETAILS}"
+else
+    sdk_sometimes false "${GETBLOCK_ASSERTION}" "${DETAILS}"
 fi
 
 exit 0
