@@ -28,6 +28,8 @@
 #include <memory>
 #include <vector>
 
+#include "antithesis_instrumentation.h"
+
 #include "adnl/adnl-node-id.hpp"
 #include "auto/tl/lite_api.h"
 #include "auto/tl/ton_api.h"

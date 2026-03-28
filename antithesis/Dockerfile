@@ -1,13 +1,9 @@
 # Antithesis build of TON validator-engine
-# Based on the project's root Dockerfile with Antithesis SDK assertions.
+# Based on the project's root Dockerfile with Antithesis SDK assertions
+# and coverage instrumentation for intelligent exploration.
 #
 # NOTE: Submodules must be initialized on the host before building.
 # Run: git submodule update --init --recursive
-#
-# Coverage instrumentation (-fsanitize-coverage=trace-pc-guard) is not yet
-# enabled due to linker compatibility issues with the project's --gc-sections
-# and --exclude-libs flags. The SDK assertions still fire without coverage
-# instrumentation; coverage can be added once the linker flags are resolved.
 
 FROM ubuntu:22.04 AS builder
 ARG DEBIAN_FRONTEND=noninteractive
@@ -45,8 +41,10 @@ RUN --mount=type=cache,target=/ton/build \
     cd /ton/build && \
     cmake -GNinja -DCMAKE_BUILD_TYPE=Release -DPORTABLE=1 -DTON_ARCH= -DTON_USE_JEMALLOC=ON \
           -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
-          -DCMAKE_C_FLAGS="-flto=thin" -DCMAKE_CXX_FLAGS="-flto=thin" \
-          -DCMAKE_EXE_LINKER_FLAGS="-flto=thin -fuse-ld=lld" .. && \
+          -DCMAKE_C_FLAGS="-flto=thin -fsanitize-coverage=trace-pc-guard -g" \
+          -DCMAKE_CXX_FLAGS="-flto=thin -fsanitize-coverage=trace-pc-guard -g" \
+          -DCMAKE_EXE_LINKER_FLAGS="-flto=thin -fuse-ld=lld -Wl,--build-id" \
+          -DCMAKE_SHARED_LINKER_FLAGS="-flto=thin -fuse-ld=lld -Wl,--build-id" .. && \
     ninja validator-engine generate-random-id lite-client func create-state gen_fif && \
     mkdir -p /build-out && \
     cp validator-engine/validator-engine utils/generate-random-id lite-client/lite-client \
