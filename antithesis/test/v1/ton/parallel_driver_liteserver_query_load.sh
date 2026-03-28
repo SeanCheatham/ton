@@ -161,10 +161,12 @@ else
     sdk_sometimes false "${ASSERTION_NAME}" "${DETAILS}"
 fi
 
-if [ "${GETBLOCK_OK}" = "true" ]; then
-    sdk_sometimes true "${GETBLOCK_ASSERTION}" "${DETAILS}"
-else
-    sdk_sometimes false "${GETBLOCK_ASSERTION}" "${DETAILS}"
+if [ -n "${BLOCK_ID}" ]; then
+    if [ "${GETBLOCK_OK}" = "true" ]; then
+        sdk_sometimes true "${GETBLOCK_ASSERTION}" "${DETAILS}"
+    else
+        sdk_sometimes false "${GETBLOCK_ASSERTION}" "${DETAILS}"
+    fi
 fi
 
 exit 0
