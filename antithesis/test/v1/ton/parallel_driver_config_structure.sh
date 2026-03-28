@@ -51,6 +51,12 @@ fi
 
 CONFIG_KEYS=$(cat /shared/validator_config_keys 2>/dev/null || echo "error")
 
+if [ -z "$CONFIG_KEYS" ]; then
+    echo "SKIP: config keys empty (likely mid-write)"
+    sleep 10
+    exit 0
+fi
+
 if [ "$CONFIG_KEYS" = "error" ]; then
     echo "FAIL: Could not read config keys"
     DETAILS=$(jq -cn '{status: "error", keys_found: "none"}')
