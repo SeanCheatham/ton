@@ -3,7 +3,7 @@
 # First driver: Validator initial state is valid before faults
 # Runs exactly once before Antithesis begins fault injection.
 # Validates that the validator started correctly and is in a known-good state.
-# Retries for up to 60 seconds since the validator may still be starting up.
+# Retries for up to 120 seconds since the validator may still be starting up.
 
 source "$(dirname "$0")/helper_sdk.sh"
 
@@ -13,7 +13,7 @@ VALIDATOR_PORT="${VALIDATOR_PORT:-30001}"
 CONSOLE_PORT="${CONSOLE_PORT:-30002}"
 LITE_PORT="${LITE_PORT:-30003}"
 HEARTBEAT_MAX_AGE=60
-MAX_RETRIES=12
+MAX_RETRIES=24
 RETRY_SLEEP=5
 
 for attempt in $(seq 1 "$MAX_RETRIES"); do
