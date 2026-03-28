@@ -46,7 +46,10 @@
 #include "fabric.h"
 #include "liteserver.hpp"
 #include "shard.hpp"
+#pragma push_macro("UNREACHABLE")
+#undef UNREACHABLE
 #include "antithesis_sdk.h"
+#pragma pop_macro("UNREACHABLE")
 
 namespace ton {
 

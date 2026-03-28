@@ -28,7 +28,10 @@
 #include "td/utils/port/path.h"
 
 #include "catchain-receiver.hpp"
+#pragma push_macro("UNREACHABLE")
+#undef UNREACHABLE
 #include "antithesis_sdk.h"
+#pragma pop_macro("UNREACHABLE")
 
 namespace ton {
 

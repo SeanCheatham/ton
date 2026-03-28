@@ -19,7 +19,10 @@
 #include "td/utils/Random.h"
 
 #include "adnl-packet.h"
+#pragma push_macro("UNREACHABLE")
+#undef UNREACHABLE
 #include "antithesis_sdk.h"
+#pragma pop_macro("UNREACHABLE")
 
 namespace ton {
 

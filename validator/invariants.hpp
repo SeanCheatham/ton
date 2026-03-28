@@ -19,7 +19,14 @@
 #pragma once
 
 #include "validator/interfaces/block-handle.h"
+
+// Save TON's UNREACHABLE() before including the Antithesis SDK, which
+// defines its own UNREACHABLE(message, ...) macro.
+#pragma push_macro("UNREACHABLE")
+#undef UNREACHABLE
 #include "antithesis_sdk.h"
+// Restore TON's UNREACHABLE() so the rest of the codebase is unaffected.
+#pragma pop_macro("UNREACHABLE")
 
 namespace ton {
 

@@ -34,7 +34,10 @@
 #include "vm/db/StaticBagOfCellsDb.h"
 #include "vm/dict.h"
 
+#pragma push_macro("UNREACHABLE")
+#undef UNREACHABLE
 #include "antithesis_sdk.h"
+#pragma pop_macro("UNREACHABLE")
 #include "candidate-serializer.h"
 #include "collator-impl.h"
 #include "fabric.h"

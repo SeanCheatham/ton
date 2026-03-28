@@ -22,7 +22,10 @@
 
 #include "catchain-received-block.hpp"
 #include "catchain-receiver-source.h"
+#pragma push_macro("UNREACHABLE")
+#undef UNREACHABLE
 #include "antithesis_sdk.h"
+#pragma pop_macro("UNREACHABLE")
 
 namespace ton {
 

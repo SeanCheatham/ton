@@ -26,7 +26,10 @@
 #include "adnl-peer.h"
 #include "adnl-peer.hpp"
 #include "utils.hpp"
+#pragma push_macro("UNREACHABLE")
+#undef UNREACHABLE
 #include "antithesis_sdk.h"
+#pragma pop_macro("UNREACHABLE")
 
 namespace ton {
 

@@ -37,7 +37,10 @@
 #include "storage-stat-cache.hpp"
 #include "top-shard-descr.hpp"
 #include "validate-query.hpp"
+#pragma push_macro("UNREACHABLE")
+#undef UNREACHABLE
 #include "antithesis_sdk.h"
+#pragma pop_macro("UNREACHABLE")
 
 #define REJECT_UNLESS_MSG(condition, msg) \
   if (!(condition)) {                     \
