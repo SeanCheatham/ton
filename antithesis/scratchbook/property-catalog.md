@@ -298,6 +298,19 @@ Antithesis assertions are embedded inline in `collator.cpp` to cover the block C
 | **Workload** | `eventually_consensus_recovers.sh` — two-phase state machine persisted in `/shared/_consensus_recovery_state` |
 | **Status** | ✅ Implemented |
 
+### All Acknowledged Transfers Persist in Final State
+
+| | |
+|---|---|
+| **Type** | Safety (Always) |
+| **Property** | Every wallet seqno confirmed by the transfer driver is still reflected in the final blockchain state at end of timeline |
+| **Invariant** | `ALWAYS(current_seqno >= last_confirmed_seqno, "All acknowledged transfers persist in final state")` — evaluated once at end of timeline from all reachable validators |
+| **Antithesis Angle** | Fault injection throughout the test is the stimulus; this is the verdict — the definitive data-loss check at timeline end |
+| **Why It Matters** | The most important end-of-timeline check for a blockchain: confirmed transactions must never be lost. A seqno regression means acknowledged writes were rolled back — critical data loss |
+| **Workload** | `finally_verify_transfers.sh` — reads `/shared/tx/last_confirmed_seqno`, queries wallet seqno via `runmethod 85143` from all reachable validators |
+| **Secondary** | `SOMETIMES(true, "Transfer state verified at end of timeline")` — emitted when the check completes successfully, confirming the verification ran |
+| **Status** | ✅ Implemented |
+
 ## Future Properties (for antithesis-workload)
 
 ### 2. Validator Engine Does Not Crash
