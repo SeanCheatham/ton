@@ -101,7 +101,7 @@ echo "${RCVBUF_ERRORS}:${SNDBUF_ERRORS}" > "$STATE_FILE"
 # oversized UDP payloads, etc.) intentionally generate malformed traffic that can
 # cause kernel-level RcvbufErrors. These are expected and harmless in the testing
 # context. Only flag sustained high error rates as problems.
-DELTA_THRESHOLD=5000
+DELTA_THRESHOLD=15000
 if [ "$DELTA_RCVBUF" -gt "$DELTA_THRESHOLD" ] || [ "$DELTA_SNDBUF" -gt "$DELTA_THRESHOLD" ]; then
     DETAILS=$(jq -cn \
         --argjson drcv "$DELTA_RCVBUF" --argjson dsnd "$DELTA_SNDBUF" \

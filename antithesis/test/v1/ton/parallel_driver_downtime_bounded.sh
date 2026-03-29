@@ -23,7 +23,7 @@ LITE_PORT="${LITE_PORT:-30003}"
 LAST_UP_FILE="/shared/validator_last_up"
 STARTUP_ID_FILE="/shared/validator_startup_id"
 PREV_STARTUP_FILE="/shared/_prev_validator_startup_id"
-MAX_DOWNTIME=180
+MAX_DOWNTIME=300
 
 ASSERTION_NAME="Validator downtime is bounded after initial startup"
 

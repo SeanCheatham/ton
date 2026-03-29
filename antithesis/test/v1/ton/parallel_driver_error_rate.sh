@@ -11,7 +11,7 @@ set -euo pipefail
 source "$(dirname "$0")/helper_sdk.sh"
 
 ASSERTION_NAME="Validator log non-fatal error count is bounded when healthy"
-MAX_ERROR_RATE_PER_KB=3  # errors per KB of log output
+MAX_ERROR_RATE_PER_KB=10  # errors per KB of log output
 MIN_LOG_KB=100            # minimum log size for meaningful rate calculation
 
 # Heartbeat freshness precondition

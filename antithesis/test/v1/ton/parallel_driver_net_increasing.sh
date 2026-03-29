@@ -55,42 +55,33 @@ if ! [[ "$CURRENT" =~ ^[0-9]+$ ]]; then
     exit 0
 fi
 
-# Append current value to history, keep last 8 lines (~64s window)
+# Append current value to history, keep last 16 lines (~128s window)
 echo "$CURRENT" >> "$HISTORY_FILE"
-tail -8 "$HISTORY_FILE" > "${HISTORY_FILE}.tmp" && mv "${HISTORY_FILE}.tmp" "$HISTORY_FILE"
+tail -16 "$HISTORY_FILE" > "${HISTORY_FILE}.tmp" && mv "${HISTORY_FILE}.tmp" "$HISTORY_FILE"
 
 # Read history
 LINES=$(wc -l < "$HISTORY_FILE")
 
-if [ "$LINES" -lt 8 ]; then
-    echo "Not enough history yet ($LINES observations, need 8), skipping"
+if [ "$LINES" -lt 16 ]; then
+    echo "Not enough history yet ($LINES observations, need 16), skipping"
     exit 0
 fi
 
-# Read the last 8 values
-VAL1=$(sed -n '1p' "$HISTORY_FILE")
-VAL2=$(sed -n '2p' "$HISTORY_FILE")
-VAL3=$(sed -n '3p' "$HISTORY_FILE")
-VAL4=$(sed -n '4p' "$HISTORY_FILE")
-VAL5=$(sed -n '5p' "$HISTORY_FILE")
-VAL6=$(sed -n '6p' "$HISTORY_FILE")
-VAL7=$(sed -n '7p' "$HISTORY_FILE")
-VAL8=$(sed -n '8p' "$HISTORY_FILE")
+# Compare first and last readings — under Antithesis process pausing,
+# /proc/1/net/dev counters freeze while ports stay open. 16 checks (~128s)
+# provides enough window to distinguish genuine stalls from pause artifacts.
+VAL_FIRST=$(sed -n '1p' "$HISTORY_FILE")
+VAL_LAST=$(sed -n '16p' "$HISTORY_FILE")
 
 DETAILS=$(jq -cn \
-    --argjson v1 "$VAL1" \
-    --argjson v2 "$VAL2" \
-    --argjson v3 "$VAL3" \
-    --argjson v4 "$VAL4" \
-    --argjson v5 "$VAL5" \
-    --argjson v6 "$VAL6" \
-    --argjson v7 "$VAL7" \
-    --argjson v8 "$VAL8" \
-    '{reading_1: $v1, reading_2: $v2, reading_3: $v3, reading_4: $v4, reading_5: $v5, reading_6: $v6, reading_7: $v7, reading_8: $v8}')
+    --argjson first "$VAL_FIRST" \
+    --argjson last "$VAL_LAST" \
+    --argjson window 16 \
+    '{first_reading: $first, last_reading: $last, window_size: $window}')
 
-# If all 8 readings are the same, network has been stalled for ~64+ seconds
-if [ "$VAL1" = "$VAL2" ] && [ "$VAL2" = "$VAL3" ] && [ "$VAL3" = "$VAL4" ] && [ "$VAL4" = "$VAL5" ] && [ "$VAL5" = "$VAL6" ] && [ "$VAL6" = "$VAL7" ] && [ "$VAL7" = "$VAL8" ]; then
-    echo "FAIL: network bytes stalled at $CURRENT for 8 consecutive checks"
+# If first and last readings are the same, network has been stalled for ~128+ seconds
+if [ "$VAL_FIRST" = "$VAL_LAST" ]; then
+    echo "FAIL: network bytes stalled at $CURRENT for 16 consecutive checks (~128s)"
     sdk_always false "$PROPERTY" "$DETAILS"
 else
     echo "PASS: network bytes are increasing"
