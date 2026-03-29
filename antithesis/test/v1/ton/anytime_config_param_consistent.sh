@@ -143,6 +143,34 @@ else
     echo "  ConfigParam 28: query returned empty output"
 fi
 
+# --- Query ConfigParam 30 (simplex consensus config) ---
+
+echo "Querying ConfigParam 30 (simplex consensus config)..."
+OUTPUT_30=$(query_config 30)
+
+PARAM30_OK=false
+
+if [ -n "${OUTPUT_30}" ]; then
+    # ConfigParam 30 contains NewConsensusConfigAll / simplex consensus parameters.
+    # Known field names include: consensus_config, new_consensus_config, target_rate,
+    # new_catchain, NewCatchain, slots_per_leader_window, first_block_timeout_ms.
+    # Use a lenient pattern — if the param is present in any recognisable form, treat as OK.
+    if echo "${OUTPUT_30}" | grep -qE '(consensus_config|target_rate|new_catchain|NewCatchain|slots_per_leader|first_block_timeout)'; then
+        PARAM30_OK=true
+        echo "  ConfigParam 30: simplex consensus config parsed successfully"
+    elif echo "${OUTPUT_30}" | grep -qE 'ConfigParam\(30\)'; then
+        # Param present but in an alternate / future format
+        PARAM30_OK=true
+        echo "  ConfigParam 30: present (alternate format)"
+    else
+        echo "  ConfigParam 30: returned data but could not find expected fields"
+        echo "  Raw output (last 10 lines):"
+        echo "${OUTPUT_30}" | tail -10
+    fi
+else
+    echo "  ConfigParam 30: query returned empty output"
+fi
+
 # --- Query ConfigParam 15 (election params) ---
 
 echo "Querying ConfigParam 15 (election params)..."
@@ -193,7 +221,7 @@ fi
 
 # --- If none of the queries succeeded, skip (all timed out under fault) ---
 
-if [ "${PARAM34_OK}" = "false" ] && [ "${PARAM28_OK}" = "false" ] && [ "${PARAM15_OK}" = "false" ]; then
+if [ "${PARAM34_OK}" = "false" ] && [ "${PARAM28_OK}" = "false" ] && [ "${PARAM15_OK}" = "false" ] && [ "${PARAM30_OK}" = "false" ]; then
     echo "All config param queries failed (likely under heavy fault), skipping"
     exit 0
 fi
@@ -226,7 +254,14 @@ if [ "${PARAM36_OK}" = "true" ] && [ -n "${NEXT_VALIDATOR_COUNT}" ]; then
     fi
 fi
 
-# Check 3: If ConfigParam 34 returned data but was unparseable (garbled), that's a failure
+# Check 3: If ConfigParam 34 is queryable but ConfigParam 30 is completely absent, that's
+# a structural inconsistency — the simplex consensus config should always be present.
+if [ "${PARAM34_OK}" = "true" ] && [ -z "${OUTPUT_30}" ]; then
+    CONSISTENT=false
+    FAIL_REASONS="${FAIL_REASONS}ConfigParam 30 missing while ConfigParam 34 is queryable; "
+fi
+
+# Check 4: If ConfigParam 34 returned data but was unparseable (garbled), that's a failure
 if [ -n "${OUTPUT_34}" ] && [ "${PARAM34_OK}" = "false" ]; then
     # Only fail if the output looks like it should have had data (not a timeout/connection error)
     if echo "${OUTPUT_34}" | grep -qiE '(cur_validators|ConfigParam\(34\))'; then
@@ -240,6 +275,7 @@ fi
 DETAILS=$(jq -cn \
     --argjson param34_ok "$([ "${PARAM34_OK}" = "true" ] && echo true || echo false)" \
     --argjson param28_ok "$([ "${PARAM28_OK}" = "true" ] && echo true || echo false)" \
+    --argjson param30_ok "$([ "${PARAM30_OK}" = "true" ] && echo true || echo false)" \
     --argjson param15_ok "$([ "${PARAM15_OK}" = "true" ] && echo true || echo false)" \
     --argjson param36_ok "$([ "${PARAM36_OK}" = "true" ] && echo true || echo false)" \
     --arg validator_count "${VALIDATOR_COUNT:-null}" \
@@ -247,8 +283,9 @@ DETAILS=$(jq -cn \
     --arg next_validator_count "${NEXT_VALIDATOR_COUNT:-null}" \
     --argjson consistent "$([ "${CONSISTENT}" = "true" ] && echo true || echo false)" \
     --arg fail_reasons "${FAIL_REASONS}" \
-    '{param34_ok: $param34_ok, param28_ok: $param28_ok, param15_ok: $param15_ok,
-      param36_ok: $param36_ok, validator_count: $validator_count, total_weight: $total_weight,
+    '{param34_ok: $param34_ok, param28_ok: $param28_ok, param30_ok: $param30_ok,
+      param15_ok: $param15_ok, param36_ok: $param36_ok,
+      validator_count: $validator_count, total_weight: $total_weight,
       next_validator_count: $next_validator_count, consistent: $consistent,
       fail_reasons: $fail_reasons}')
 
@@ -262,9 +299,9 @@ else
     sdk_always false "$ALWAYS_NAME" "$DETAILS"
 fi
 
-# Sometimes: all 3 config queries returned valid parseable data
-if [ "${PARAM34_OK}" = "true" ] && [ "${PARAM28_OK}" = "true" ] && [ "${PARAM15_OK}" = "true" ]; then
-    echo "All 3 config param queries returned valid data"
+# Sometimes: all 4 core config queries returned valid parseable data (incl. param 30)
+if [ "${PARAM34_OK}" = "true" ] && [ "${PARAM28_OK}" = "true" ] && [ "${PARAM15_OK}" = "true" ] && [ "${PARAM30_OK}" = "true" ]; then
+    echo "All 4 config param queries returned valid data (including ConfigParam 30)"
     sdk_sometimes true "$SOMETIMES_NAME" "$DETAILS"
 fi
 
