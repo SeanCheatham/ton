@@ -405,9 +405,14 @@ if [ -f "${DB_ROOT}/config.json" ]; then
     LITE_KEY=$(cat "${DB_ROOT}/.liteserver_pub_b64" 2>/dev/null || true)
     if [ -n "$LITE_KEY" ]; then
         # lite-client expects a global-config-style JSON with liteserver descriptors.
-        # IP is encoded as a signed 32-bit integer. For the Docker network, the workload
-        # uses the hostname "validator" via -a flag, but we still need the key for auth.
-        # Use 2130706433 (127.0.0.1) as placeholder — workload overrides with -a flag.
+        # IP is encoded as a signed 32-bit integer. lite-client ignores the -a flag
+        # when using -C (config file) — it reads the IP directly from the config JSON.
+        # So we MUST write the real container IP here, not a placeholder.
+        #
+        # Convert dotted-decimal IP to signed 32-bit integer:
+        #   e.g. 10.0.0.5 -> 167772165, 192.168.1.1 -> -1062731519
+        IP_INT=$(echo "${IP}" | awk -F. '{v=(($1*256+$2)*256+$3)*256+$4; if(v>=2147483648) print v-4294967296; else print v}')
+        echo "Liteserver config: IP=${IP} -> IP_INT=${IP_INT}"
         # Write to a temp file then mv atomically to prevent workload scripts from
         # reading a partially-written config during restarts.
         cat > "${LITESERVER_CONFIG}.tmp" <<LITEEOF
@@ -416,7 +421,7 @@ if [ -f "${DB_ROOT}/config.json" ]; then
     "liteservers": [
         {
             "@type": "liteserver.desc",
-            "ip": 2130706433,
+            "ip": ${IP_INT},
             "port": ${LITE_PORT},
             "id": {
                 "@type": "pub.ed25519",

@@ -119,6 +119,13 @@ fi
 if [ "${CONSENSUS_READY}" = "false" ]; then
     echo "WARNING: Consensus did not reach seqno >= 1 after 240s. Proceeding anyway."
     echo "  Fault injection will start, but validators may not have bootstrapped consensus."
+    echo "--- Diagnostic: liteserver config ---"
+    cat "${LITESERVER_CFG}" 2>/dev/null || echo "(config file missing)"
+    echo "--- Diagnostic: validator log tail ---"
+    tail -50 /shared/validator.log 2>/dev/null || echo "(validator log missing)"
+    echo "--- Diagnostic: lite-client one-shot attempt ---"
+    timeout 5 lite-client -v 3 -a "${VALIDATOR_IP}:${LITE_PORT}" -C "${LITESERVER_CFG}" -c 'last' -c 'quit' 2>&1 | tail -30 || true
+    echo "--- End diagnostics ---"
 fi
 
 # Catalog SDK assertions before signaling setup complete
