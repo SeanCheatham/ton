@@ -30,6 +30,11 @@
 #include "full-node-master.hpp"
 #include "validator-group.hpp"
 
+#pragma push_macro("UNREACHABLE")
+#undef UNREACHABLE
+#include "antithesis_sdk.h"
+#pragma pop_macro("UNREACHABLE")
+
 namespace ton {
 
 namespace validator {
@@ -209,6 +214,7 @@ static bool need_send_candidate_broadcast(const validatorsession::BlockSourceInf
 
 void ValidatorGroup::generate_block_candidate(validatorsession::BlockSourceInfo source_info,
                                               td::Promise<GeneratedCandidate> promise) {
+  REACHABLE("Validator group generating block candidate", {{}});
   if (destroying_) {
     promise.set_error(td::Status::Error("validator session finished"));
     return;
@@ -283,6 +289,7 @@ void ValidatorGroup::generated_block_candidate(validatorsession::BlockSourceInfo
 
 void ValidatorGroup::validate_block_candidate(validatorsession::BlockSourceInfo source_info, BlockCandidate block,
                                               td::Promise<std::pair<CandidateAccept, bool>> promise) {
+  REACHABLE("Validator group validating block candidate", {{}});
   if (destroying_) {
     promise.set_error(td::Status::Error("validator session finished"));
     return;
@@ -430,6 +437,7 @@ void ValidatorGroup::accept_block_candidate(validatorsession::BlockSourceInfo so
 void ValidatorGroup::accept_block_query(BlockIdExt block_id, td::Ref<BlockData> block, std::vector<BlockIdExt> prev,
                                         td::Ref<block::BlockSignatureSet> sig_set, int send_broadcast_mode,
                                         td::Promise<td::Unit> promise, bool is_retry) {
+  REACHABLE("Validator group accept_block_query entered", {{"block", block_id.to_str()}});
   auto P = td::PromiseCreator::lambda([=, SelfId = actor_id(this),
                                        promise = std::move(promise)](td::Result<td::Unit> R) mutable {
     if (R.is_error()) {
@@ -438,6 +446,7 @@ void ValidatorGroup::accept_block_query(BlockIdExt block_id, td::Ref<BlockData> 
         return;
       }
       LOG_CHECK(R.error().code() == ErrorCode::timeout || R.error().code() == ErrorCode::notready) << R.move_as_error();
+      REACHABLE("Validator group accept_block_query retrying after error", {{}});
       td::actor::send_closure(SelfId, &ValidatorGroup::accept_block_query, block_id, std::move(block), std::move(prev),
                               std::move(sig_set), send_broadcast_mode, std::move(promise), true);
     } else {
@@ -561,6 +570,7 @@ std::unique_ptr<validatorsession::ValidatorSession::Callback> ValidatorGroup::ma
 }
 
 void ValidatorGroup::create_session() {
+  REACHABLE("Validator group session created", {{}});
   CHECK(!init_);
   init_ = true;
   std::vector<validatorsession::ValidatorSessionNode> vec;
@@ -586,6 +596,9 @@ void ValidatorGroup::create_session() {
     vec.emplace_back(std::move(n));
   }
   CHECK(found);
+  ALWAYS_OR_UNREACHABLE(found,
+    "Validator group found local validator in session config",
+    {{}});
 
   td::actor::send_closure(adnl_sender_, &adnl::AdnlSenderEx::add_id, local_adnl_id_);
   config_.catchain_opts.broadcast_speed_multiplier = opts_->get_catchain_broadcast_speed_multiplier();
