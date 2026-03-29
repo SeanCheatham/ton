@@ -41,6 +41,10 @@
 #include "ton/ton-tl.hpp"
 #include "validator/stats-merger.h"
 
+#pragma push_macro("UNREACHABLE")
+#undef UNREACHABLE
+#include "antithesis_sdk.h"
+#pragma pop_macro("UNREACHABLE")
 #include "checksum.h"
 #include "fabric.h"
 #include "get-next-key-blocks.h"
@@ -69,6 +73,9 @@ void ValidatorManagerImpl::validate_block_is_next_proof(BlockIdExt prev_block_id
     promise.set_error(td::Status::Error(ErrorCode::protoviolation, "validate_block_is_next_proof(): bad seqno"));
     return;
   }
+  ALWAYS_OR_UNREACHABLE(last_masterchain_state_.not_null(),
+    "Masterchain state is non-null when accessed",
+    {{}});
   CHECK(last_masterchain_state_.not_null());
   auto pp = create_proof(next_block_id, std::move(proof));
   if (pp.is_error()) {
@@ -1532,10 +1539,15 @@ void ValidatorManagerImpl::written_handle(BlockHandle handle, td::Promise<td::Un
 
 void ValidatorManagerImpl::new_block_cont(BlockHandle handle, td::Ref<ShardState> state,
                                           td::Promise<td::Unit> promise) {
+  REACHABLE("Validator manager new_block_cont entered",
+    {{"seqno", std::to_string(handle->id().id.seqno)}});
   if (state->get_shard().is_masterchain() && handle->id().id.seqno > last_masterchain_seqno_) {
     if (handle->id().id.seqno == last_masterchain_seqno_ + 1) {
       VLOG(VALIDATOR_DEBUG) << "new block " << handle->id().id.to_str() << " is the next masterchain block";
       last_masterchain_seqno_ = handle->id().id.seqno;
+      ALWAYS_OR_UNREACHABLE(handle->id().id.seqno == last_masterchain_seqno_,
+        "Masterchain seqno advances sequentially in new_block_cont",
+        {{"seqno", std::to_string(last_masterchain_seqno_)}});
       last_masterchain_state_ = td::Ref<MasterchainState>{state};
       last_masterchain_block_id_ = handle->id();
       last_masterchain_block_handle_ = handle;
@@ -2214,7 +2226,11 @@ void ValidatorManagerImpl::completed_prestart_sync() {
 }
 
 void ValidatorManagerImpl::new_masterchain_block() {
+  REACHABLE("New masterchain block processed",
+    {{"seqno", std::to_string(last_masterchain_seqno_)}});
   if (last_masterchain_seqno_ > 0 && last_masterchain_block_handle_->is_key_block()) {
+    REACHABLE("Masterchain key block detected",
+      {{"seqno", std::to_string(last_masterchain_seqno_)}});
     last_key_block_handle_ = last_masterchain_block_handle_;
     if (last_key_block_handle_->id().seqno() > last_known_key_block_handle_->id().seqno()) {
       last_known_key_block_handle_ = last_key_block_handle_;
@@ -2848,6 +2864,8 @@ void ValidatorManagerImpl::state_serializer_update(BlockSeqno seqno) {
 }
 
 void ValidatorManagerImpl::alarm() {
+  REACHABLE("Validator manager alarm tick",
+    {{}});
   try_advance_gc_masterchain_block();
   alarm_timestamp() = td::Timestamp::in(1.0);
   if (shard_client_state_.not_null() && gc_masterchain_handle_) {
