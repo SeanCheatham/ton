@@ -148,22 +148,31 @@ SEND_OUTPUT=$(timeout 10 lite-client \
     -c 'quit' 2>&1) || true
 echo "Send output: ${SEND_OUTPUT:0:300}"
 
-# Wait for the transaction to be included in a block
-sleep 5
-
-echo "Re-querying wallet seqno..."
-NEW_SEQNO=$(get_wallet_seqno)
+# Poll for seqno advancement (up to 45s, every 3s)
+MAX_WAIT=45
+WAITED=0
+NEW_SEQNO=""
+while [ "$WAITED" -lt "$MAX_WAIT" ]; do
+    sleep 3
+    WAITED=$((WAITED + 3))
+    NEW_SEQNO=$(get_wallet_seqno)
+    if [ -n "${NEW_SEQNO}" ] && [[ "${NEW_SEQNO}" =~ ^[0-9]+$ ]] && [ "${NEW_SEQNO}" -gt "${SEQNO}" ]; then
+        echo "Transfer confirmed after ${WAITED}s (seqno ${SEQNO} -> ${NEW_SEQNO})"
+        break
+    fi
+done
 
 if [ -z "${NEW_SEQNO}" ] || ! [[ "${NEW_SEQNO}" =~ ^[0-9]+$ ]]; then
-    echo "Could not parse new seqno (got: '${NEW_SEQNO}'), skipping"
+    echo "Could not parse seqno after ${WAITED}s polling (got: '${NEW_SEQNO}'), skipping"
     exit 0
 fi
-echo "New wallet seqno: ${NEW_SEQNO}"
+echo "New wallet seqno: ${NEW_SEQNO} (after ${WAITED}s)"
 
 DETAILS=$(jq -cn \
     --argjson before "${SEQNO}" \
     --argjson after "${NEW_SEQNO}" \
-    '{seqno_before: $before, seqno_after: $after}')
+    --argjson wait "${WAITED}" \
+    '{seqno_before: $before, seqno_after: $after, poll_seconds: $wait}')
 
 if [ "${NEW_SEQNO}" -gt "${SEQNO}" ]; then
     echo "PASS: transfer completed (seqno ${SEQNO} -> ${NEW_SEQNO})"

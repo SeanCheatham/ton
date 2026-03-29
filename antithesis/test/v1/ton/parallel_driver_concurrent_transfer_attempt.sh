@@ -113,17 +113,25 @@ echo "Send output: ${SEND_OUTPUT:0:300}"
 CONTENTION_DETAILS=$(jq -cn --argjson seqno "${SEQNO}" '{seqno: $seqno}')
 sdk_sometimes true "${SOMETIMES_NAME}" "${CONTENTION_DETAILS}"
 
-# Wait for block inclusion
-sleep 5
-
-echo "Re-querying wallet seqno after contention attempt..."
-NEW_SEQNO=$(get_wallet_seqno)
+# Poll for seqno advancement (up to 15s, every 3s)
+MAX_WAIT=15
+WAITED=0
+NEW_SEQNO=""
+while [ "$WAITED" -lt "$MAX_WAIT" ]; do
+    sleep 3
+    WAITED=$((WAITED + 3))
+    NEW_SEQNO=$(get_wallet_seqno)
+    if [ -n "${NEW_SEQNO}" ] && [[ "${NEW_SEQNO}" =~ ^[0-9]+$ ]] && [ "${NEW_SEQNO}" -gt "${SEQNO}" ]; then
+        echo "Seqno advanced after ${WAITED}s (seqno ${SEQNO} -> ${NEW_SEQNO})"
+        break
+    fi
+done
 
 if [ -z "${NEW_SEQNO}" ] || ! [[ "${NEW_SEQNO}" =~ ^[0-9]+$ ]]; then
-    echo "Could not parse new seqno (got: '${NEW_SEQNO}'), skipping assertion"
+    echo "Could not parse new seqno after ${WAITED}s polling (got: '${NEW_SEQNO}'), skipping assertion"
     exit 0
 fi
-echo "New wallet seqno: ${NEW_SEQNO}"
+echo "New wallet seqno: ${NEW_SEQNO} (after ${WAITED}s)"
 
 DELTA=$(( NEW_SEQNO - SEQNO ))
 DETAILS=$(jq -cn \

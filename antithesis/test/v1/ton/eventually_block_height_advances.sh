@@ -80,10 +80,10 @@ if [ -z "${SEQNO_BEFORE}" ] || ! [[ "${SEQNO_BEFORE}" =~ ^[0-9]+$ ]]; then
 fi
 echo "Initial seqno: ${SEQNO_BEFORE}"
 
-# Wait 15 seconds for new blocks to be produced
-sleep 15
+# Wait 45 seconds for new blocks to be produced (longer to handle fault injection time dilation)
+sleep 45
 
-echo "Querying block height after 15s..."
+echo "Querying block height after 45s..."
 SEQNO_AFTER=$(get_seqno)
 
 if [ -z "${SEQNO_AFTER}" ] || ! [[ "${SEQNO_AFTER}" =~ ^[0-9]+$ ]]; then
@@ -104,7 +104,7 @@ if [ "${DELTA}" -gt 0 ]; then
     echo "PASS: block height advanced by ${DELTA} (${SEQNO_BEFORE} → ${SEQNO_AFTER})"
     sdk_sometimes true "${ASSERTION_NAME}" "${DETAILS}"
 else
-    echo "No new blocks in 15s (seqno stuck at ${SEQNO_BEFORE})"
+    echo "No new blocks in 45s (seqno stuck at ${SEQNO_BEFORE})"
     sdk_sometimes false "${ASSERTION_NAME}" "${DETAILS}"
 fi
 
