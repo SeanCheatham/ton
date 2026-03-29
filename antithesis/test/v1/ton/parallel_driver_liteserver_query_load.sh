@@ -15,6 +15,8 @@ ASSERTION_NAME="Liteserver handles diverse query types"
 GETBLOCK_ASSERTION="Liteserver getblock query returned valid data"
 LASTTRANS_ASSERTION="Liteserver transaction history query returned valid data"
 VALSTATS_ASSERTION="Liteserver validatorstats query returned valid data"
+MASTERCHAIN_INFO_ASSERTION="Liteserver masterchain info query succeeded during load"
+MSGQUEUE_ASSERTION="Liteserver outbound queue query returned valid data"
 HEARTBEAT_MAX_AGE=60
 HEARTBEAT_WAIT_MAX=20   # seconds to wait for heartbeat to appear
 HEARTBEAT_WAIT_POLL=2   # seconds between retries
@@ -23,6 +25,8 @@ sdk_catalog_sometimes "${ASSERTION_NAME}"
 sdk_catalog_sometimes "${GETBLOCK_ASSERTION}"
 sdk_catalog_sometimes "${LASTTRANS_ASSERTION}"
 sdk_catalog_sometimes "${VALSTATS_ASSERTION}"
+sdk_catalog_sometimes "${MASTERCHAIN_INFO_ASSERTION}"
+sdk_catalog_sometimes "${MSGQUEUE_ASSERTION}"
 
 # Precondition: heartbeat must be fresh.
 # Retry briefly instead of immediately skipping — the validator's heartbeat
@@ -235,6 +239,43 @@ if [ -n "${BLOCK_ID}" ]; then
     fi
 fi
 
+# --- getMasterchainInfo (as counted load query) ---
+MCINFO_OK=false
+OUTPUT_MC=$(timeout 15 lite-client \
+    -v 1 \
+    -a "${VALIDATOR_IP}:${LITE_PORT}" \
+    -C /shared/liteserver.config.json \
+    -c 'last' \
+    -c 'quit' 2>&1) || true
+
+echo "getMasterchainInfo response: ${#OUTPUT_MC} chars"
+echo "${OUTPUT_MC:0:500}"
+
+if echo "${OUTPUT_MC}" | grep -qi 'latest masterchain block'; then
+    MCINFO_OK=true
+    echo "getMasterchainInfo returned valid data"
+fi
+
+# --- Message queue sizes (exercises getBlockOutMsgQueueSize) ---
+MSGQUEUE_OK=false
+if [ -n "${BLOCK_ID}" ]; then
+    OUTPUT_MQ=$(timeout 15 lite-client \
+        -v 1 \
+        -a "${VALIDATOR_IP}:${LITE_PORT}" \
+        -C /shared/liteserver.config.json \
+        -c 'last' \
+        -c 'msgqueuesizes' \
+        -c 'quit' 2>&1) || true
+
+    echo "msgqueuesizes response: ${#OUTPUT_MQ} chars"
+    echo "${OUTPUT_MQ:0:500}"
+
+    if echo "${OUTPUT_MQ}" | grep -qi 'Outbound message queue sizes'; then
+        MSGQUEUE_OK=true
+        echo "msgqueuesizes returned valid data"
+    fi
+fi
+
 # --- Emit assertions ---
 DETAILS=$(jq -cn \
     --argjson output_len "${OUTPUT_LEN}" \
@@ -246,8 +287,10 @@ DETAILS=$(jq -cn \
     --argjson lasttrans "${LASTTRANS_OK}" \
     --argjson allshards "${ALLSHARDS_OK}" \
     --argjson validatorstats "${VALSTATS_OK}" \
+    --argjson mcinfo "${MCINFO_OK}" \
+    --argjson msgqueue "${MSGQUEUE_OK}" \
     --arg block_id "${BLOCK_ID}" \
-    '{output_length: $output_len, resolved_ip: $ip, getblock: $getblock, getblockheader: $getheader, getstate: $getstate, getconfig: $getconfig, lasttrans: $lasttrans, allshards: $allshards, validatorstats: $validatorstats, block_id: $block_id}')
+    '{output_length: $output_len, resolved_ip: $ip, getblock: $getblock, getblockheader: $getheader, getstate: $getstate, getconfig: $getconfig, lasttrans: $lasttrans, allshards: $allshards, validatorstats: $validatorstats, mcinfo: $mcinfo, msgqueue: $msgqueue, block_id: $block_id}')
 
 if [ "${OUTPUT_LEN}" -gt 0 ]; then
     echo "PASS: liteserver responded to diverse queries"
@@ -281,6 +324,16 @@ if [ -n "${BLOCK_ID}" ]; then
     else
         sdk_sometimes false "${VALSTATS_ASSERTION}" "${DETAILS}"
     fi
+fi
+
+# Emit getMasterchainInfo assertion
+if [ "${MCINFO_OK}" = "true" ]; then
+    sdk_sometimes true "${MASTERCHAIN_INFO_ASSERTION}" "${DETAILS}"
+fi
+
+# Emit msgqueuesizes assertion
+if [ "${MSGQUEUE_OK}" = "true" ]; then
+    sdk_sometimes true "${MSGQUEUE_ASSERTION}" "${DETAILS}"
 fi
 
 exit 0
