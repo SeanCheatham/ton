@@ -498,7 +498,7 @@ echo "0" > ${METRIC_PREFIX}_accept_queue
 echo "0:0" > ${METRIC_PREFIX}_rocksdb_options
 echo "0" > ${METRIC_PREFIX}_rocksdb_tmp_files
 echo "0" > ${METRIC_PREFIX}_sigblk
-echo "0:0" > ${METRIC_PREFIX}_rss_history
+> ${METRIC_PREFIX}_rss_history   # create empty file; heartbeat loop writes first real entry
 echo "0:0" > ${METRIC_PREFIX}_fd_history
 echo "1" > ${METRIC_PREFIX}_db_perms
 echo "0" > ${METRIC_PREFIX}_zombie_count

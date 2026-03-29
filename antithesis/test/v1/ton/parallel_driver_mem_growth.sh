@@ -56,11 +56,11 @@ if [ ${#ENTRIES[@]} -lt "$MIN_ENTRIES" ]; then
     exit 0
 fi
 
-# Extract RSS values
+# Extract RSS values, filtering out dummy initialization entries (e.g. "0:0")
 RSS_VALUES=()
 for entry in "${ENTRIES[@]}"; do
     val="${entry#*:}"
-    if [[ "$val" =~ ^[0-9]+$ ]]; then
+    if [[ "$val" =~ ^[0-9]+$ ]] && [ "$val" -gt 0 ]; then
         RSS_VALUES+=("$val")
     fi
 done
