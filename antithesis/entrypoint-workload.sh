@@ -49,6 +49,78 @@ for i in $(seq 1 10); do
     sleep 2
 done
 
+# ---------------------------------------------------------------------------
+# Consensus readiness gate: wait for masterchain seqno >= 1 before signaling
+# setup_complete. This is CRITICAL because Antithesis starts fault injection
+# ~1s after setup_complete. Without this gate, aggressive network partitions
+# prevent catchain from completing its initial handshake, and validators never
+# produce a block beyond genesis (seqno 0).
+#
+# We query the primary validator's liteserver to check the masterchain height.
+# The liteserver config must exist (written by the validator entrypoint) and
+# the liteserver TCP port must be up (checked above).
+# ---------------------------------------------------------------------------
+echo "Waiting for consensus to bootstrap (masterchain seqno >= 1)..."
+
+# Resolve validator IP for lite-client -a flag
+VALIDATOR_IP=""
+if command -v getent >/dev/null 2>&1; then
+    VALIDATOR_IP=$(getent hosts "${VALIDATOR_HOST}" 2>/dev/null | awk '{print $1; exit}')
+fi
+[ -z "${VALIDATOR_IP}" ] && VALIDATOR_IP="${VALIDATOR_HOST}"
+
+# Wait for liteserver config to appear (written atomically by validator entrypoint)
+LITESERVER_CFG="/shared/liteserver.config.json"
+for i in $(seq 1 30); do
+    if [ -f "${LITESERVER_CFG}" ]; then
+        echo "Liteserver config found: ${LITESERVER_CFG}"
+        break
+    fi
+    if [ "$i" -eq 30 ]; then
+        echo "WARNING: Liteserver config not found after 60s, proceeding without consensus gate"
+    fi
+    sleep 2
+done
+
+CONSENSUS_READY=false
+if [ -f "${LITESERVER_CFG}" ]; then
+    for i in $(seq 1 120); do
+        # Query liteserver for current masterchain block info.
+        # Use a subshell with +o pipefail to avoid set -euo pipefail killing
+        # the script when lite-client fails (connection refused, timeout, etc.)
+        SEQNO=$(
+            set +o pipefail
+            timeout 5 lite-client \
+                -v 1 \
+                -a "${VALIDATOR_IP}:${LITE_PORT}" \
+                -C "${LITESERVER_CFG}" \
+                -c 'last' \
+                -c 'quit' 2>&1 \
+            | grep -oE '\(-1,[0-9a-fA-F]+,[0-9]+\)' \
+            | grep -oE ',[0-9]+\)$' \
+            | tr -d ',)' \
+            | tail -1
+        ) || SEQNO=""
+
+        if [ -n "${SEQNO}" ] && [ "${SEQNO}" -gt 0 ] 2>/dev/null; then
+            echo "Consensus started: masterchain seqno=${SEQNO} (after $((i * 2))s)"
+            CONSENSUS_READY=true
+            break
+        fi
+
+        if [ "$((i % 15))" -eq 0 ]; then
+            echo "Still waiting for consensus... (${i}/120, seqno=${SEQNO:-unknown})"
+        fi
+
+        sleep 2
+    done
+fi
+
+if [ "${CONSENSUS_READY}" = "false" ]; then
+    echo "WARNING: Consensus did not reach seqno >= 1 after 240s. Proceeding anyway."
+    echo "  Fault injection will start, but validators may not have bootstrapped consensus."
+fi
+
 # Catalog SDK assertions before signaling setup complete
 source /opt/antithesis/test/v1/ton/helper_sdk.sh
 sdk_catalog_always "Validator subsystem consistency: all ports reachable together"
