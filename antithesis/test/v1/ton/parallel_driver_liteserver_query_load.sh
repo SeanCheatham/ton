@@ -119,7 +119,7 @@ if [ -n "${BLOCK_ID}" ]; then
     echo "${OUTPUT2:0:500}"
 
     # Check getblock success
-    if echo "${OUTPUT2}" | grep -qi 'block data'; then
+    if echo "${OUTPUT2}" | grep -qiE 'block contents|got block|BlockIdExt'; then
         GETBLOCK_OK=true
         echo "getblock returned valid data"
     fi
