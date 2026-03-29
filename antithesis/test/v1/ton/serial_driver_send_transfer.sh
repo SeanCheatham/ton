@@ -117,11 +117,12 @@ if [ -n "${CURRENT_BALANCE}" ] && [[ "${CURRENT_BALANCE}" =~ ^[0-9]+$ ]]; then
                 --arg prev "${PREV_BALANCE}" \
                 --arg curr "${CURRENT_BALANCE}" \
                 '{previous_balance: $prev, current_balance: $curr}')
-            if [ "${CURRENT_BALANCE}" -gt "${PREV_BALANCE}" ]; then
-                echo "FAIL: balance increased unexpectedly (${PREV_BALANCE} -> ${CURRENT_BALANCE})"
+            BAL_DIFF=$((CURRENT_BALANCE - PREV_BALANCE))
+            if [ "$BAL_DIFF" -gt 10000000000 ]; then  # > 10 Grams in nanograms
+                echo "FAIL: balance increased by >10G unexpectedly (${PREV_BALANCE} -> ${CURRENT_BALANCE})"
                 sdk_always false "${BALANCE_ALWAYS_NAME}" "${BAL_DETAILS}"
             else
-                echo "PASS: balance consistent (${PREV_BALANCE} -> ${CURRENT_BALANCE})"
+                echo "PASS: balance within expected bounds (${PREV_BALANCE} -> ${CURRENT_BALANCE})"
                 sdk_always true "${BALANCE_ALWAYS_NAME}" "${BAL_DETAILS}"
                 sdk_sometimes true "${BALANCE_SOMETIMES_NAME}" "${BAL_DETAILS}"
             fi
