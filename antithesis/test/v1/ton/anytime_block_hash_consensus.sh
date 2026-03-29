@@ -7,12 +7,15 @@
 # block content (root hash + file hash) at a given height, not just the seqno.
 # Two validators reporting the same seqno but different hashes = consensus fork.
 #
-# Uses a slightly stale seqno (last_mc_seqno - 2) to give validators time to
-# replicate, avoiding false positives from propagation delay.
+# Uses MIN(all validators' latest seqnos) - 3 as the check height, ensuring
+# the checked block is well below ALL validators' confirmed tips and fully
+# finalized by every validator. This avoids false positives from sync lag
+# after fault-induced restarts (previously used a state file from v1 only).
 #
 # Hardened against fault-induced validator restarts:
 #   - Checks heartbeat freshness for all validators before comparing
 #   - Skips comparison if any validator's heartbeat is stale (may be catching up)
+#   - Requires ALL validators to report their latest seqno
 #   - Skips if any validator's latest seqno is more than 5 behind others (still syncing)
 #   - Includes block IDs, seqnos, and heartbeat ages in assertion details
 #
@@ -22,7 +25,6 @@ source "$(dirname "$0")/helper_sdk.sh"
 
 ALWAYS_NAME="Cross-validator block hash matches at same height"
 SOMETIMES_NAME="Block hash verified across multiple validators"
-STATE_FILE="/shared/_last_mc_seqno"
 
 VALIDATOR_HOST="${VALIDATOR_HOST:-ton-validator}"
 VALIDATOR2_HOST="${VALIDATOR2_HOST:-ton-validator2}"
@@ -49,27 +51,7 @@ if ! command -v lite-client >/dev/null 2>&1; then
     exit 0
 fi
 
-if [ ! -f "${STATE_FILE}" ]; then
-    echo "State file ${STATE_FILE} not found, skipping"
-    exit 0
-fi
-
-LAST_SEQNO=$(cat "${STATE_FILE}" 2>/dev/null || true)
-LAST_SEQNO=$(echo "${LAST_SEQNO}" | tr -d '[:space:]')
-
-if [ -z "${LAST_SEQNO}" ] || ! [[ "${LAST_SEQNO}" =~ ^[0-9]+$ ]]; then
-    echo "Could not parse last_mc_seqno, skipping"
-    exit 0
-fi
-
-if [ "${LAST_SEQNO}" -lt 3 ]; then
-    echo "Last seqno ${LAST_SEQNO} too low (need >= 3), skipping"
-    exit 0
-fi
-
-# Use a slightly stale seqno to allow propagation
-CHECK_SEQNO=$(( LAST_SEQNO - 2 ))
-echo "Checking block hash consensus at seqno ${CHECK_SEQNO} (last_mc_seqno=${LAST_SEQNO})"
+# CHECK_SEQNO is computed after querying all validators' latest seqnos (below).
 
 # --- Helper: resolve hostname to IP ---
 
@@ -213,24 +195,45 @@ for idx in 0 1 2; do
     fi
 done
 
-if [ "${ALL_HAVE_SEQNO}" = "true" ]; then
-    # Find max seqno
-    MAX_LATEST=0
-    for s in "${LATEST_SEQNOS[@]}"; do
-        if [ "${s}" -gt "${MAX_LATEST}" ]; then
-            MAX_LATEST="${s}"
-        fi
-    done
-
-    # Check if any validator is lagging too far behind
-    for idx in 0 1 2; do
-        lag=$(( MAX_LATEST - LATEST_SEQNOS[$idx] ))
-        if [ "${lag}" -gt "${MAX_SEQNO_LAG}" ]; then
-            echo "SKIP: ${HB_LABELS[$idx]} is ${lag} blocks behind max (${LATEST_SEQNOS[$idx]} vs ${MAX_LATEST}) — still syncing"
-            exit 0
-        fi
-    done
+if [ "${ALL_HAVE_SEQNO}" != "true" ]; then
+    echo "SKIP: Not all validators reported their latest seqno"
+    exit 0
 fi
+
+# Find max seqno
+MAX_LATEST=0
+for s in "${LATEST_SEQNOS[@]}"; do
+    if [ "${s}" -gt "${MAX_LATEST}" ]; then
+        MAX_LATEST="${s}"
+    fi
+done
+
+# Check if any validator is lagging too far behind
+for idx in 0 1 2; do
+    lag=$(( MAX_LATEST - LATEST_SEQNOS[$idx] ))
+    if [ "${lag}" -gt "${MAX_SEQNO_LAG}" ]; then
+        echo "SKIP: ${HB_LABELS[$idx]} is ${lag} blocks behind max (${LATEST_SEQNOS[$idx]} vs ${MAX_LATEST}) — still syncing"
+        exit 0
+    fi
+done
+
+# Use MIN(all validators' latest seqnos) - 3 as the check height.
+# This guarantees the checked block is well below ALL validators' confirmed tips,
+# ensuring every validator has fully finalized it.
+MIN_SEQNO="${LATEST_SEQNOS[0]}"
+for s in "${LATEST_SEQNOS[@]}"; do
+    if [ "${s}" -lt "${MIN_SEQNO}" ]; then
+        MIN_SEQNO="${s}"
+    fi
+done
+CHECK_SEQNO=$(( MIN_SEQNO - 3 ))
+
+if [ "${CHECK_SEQNO}" -lt 1 ]; then
+    echo "CHECK_SEQNO ${CHECK_SEQNO} too low (need >= 1, MIN_SEQNO=${MIN_SEQNO}), skipping"
+    exit 0
+fi
+
+echo "Checking block hash consensus at seqno ${CHECK_SEQNO} (MIN_SEQNO=${MIN_SEQNO}, MAX_SEQNO=${MAX_LATEST})"
 
 # --- Query all 3 validators for block at CHECK_SEQNO ---
 
