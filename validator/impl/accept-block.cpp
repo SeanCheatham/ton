@@ -32,6 +32,11 @@
 #include "fabric.h"
 #include "top-shard-descr.hpp"
 
+#pragma push_macro("UNREACHABLE")
+#undef UNREACHABLE
+#include "antithesis_sdk.h"
+#pragma pop_macro("UNREACHABLE")
+
 namespace ton {
 
 namespace validator {
@@ -329,6 +334,8 @@ bool AcceptBlockQuery::create_new_proof() {
 }
 
 void AcceptBlockQuery::abort_query(td::Status reason) {
+  REACHABLE("AcceptBlock query aborted",
+    {{"block_id", id_.to_str()}, {"error", reason.to_string()}});
   if (promise_) {
     VLOG(VALIDATOR_WARNING) << "aborting accept block query: " << reason;
     promise_.set_error(std::move(reason));
@@ -355,6 +362,8 @@ void AcceptBlockQuery::finish_query() {
   if (apply_) {
     ValidatorInvariants::check_post_accept(handle_);
   }
+  REACHABLE("AcceptBlock query completed successfully",
+    {{"block_id", id_.to_str()}, {"is_masterchain", is_masterchain() ? "true" : "false"}});
   if (is_masterchain()) {
     CHECK(handle_->inited_proof());
   } else {
@@ -373,6 +382,9 @@ void AcceptBlockQuery::alarm() {
 void AcceptBlockQuery::start_up() {
   VLOG(VALIDATOR_DEBUG) << "start_up()";
   alarm_timestamp() = timeout_;
+
+  REACHABLE("AcceptBlock query started",
+    {{"block_id", id_.to_str()}, {"is_masterchain", is_masterchain() ? "true" : "false"}, {"apply", apply_ ? "true" : "false"}});
 
   if (!is_fork_ && validator_set_.is_null()) {
     fatal_error("no real ValidatorSet passed to AcceptBlockQuery");
@@ -420,6 +432,8 @@ void AcceptBlockQuery::got_block_handle(BlockHandle handle) {
       (is_masterchain() ? handle_->inited_proof() && handle_->is_applied() && handle_->inited_is_key_block()
                         : handle_->inited_proof_link()) &&
       send_broadcast_mode_ == 0) {
+    REACHABLE("AcceptBlock skipped: block already fully accepted",
+      {{"block_id", id_.to_str()}});
     finish_query();
     return;
   }
@@ -580,6 +594,10 @@ void AcceptBlockQuery::written_state(td::Ref<ShardState> upd_state) {
   VLOG(VALIDATOR_DEBUG) << "written state";
   CHECK(data_.not_null());
   state_ = std::move(upd_state);
+
+  ALWAYS_OR_UNREACHABLE(state_keep_old_hash_ == state_old_hash_,
+    "AcceptBlock previous state hash matches expected",
+    {{"block_id", id_.to_str()}, {"expected", state_old_hash_.to_hex()}, {"actual", state_keep_old_hash_.to_hex()}});
 
   if (apply_ && state_keep_old_hash_ != state_old_hash_) {
     fatal_error(PSTRING() << "invalid previous state hash in newly-created proof: expected "
