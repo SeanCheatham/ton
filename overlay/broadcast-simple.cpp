@@ -28,6 +28,11 @@
 #include "broadcast-simple.hpp"
 #include "overlay.hpp"
 
+#pragma push_macro("UNREACHABLE")
+#undef UNREACHABLE
+#include "antithesis_sdk.h"
+#pragma pop_macro("UNREACHABLE")
+
 namespace ton {
 
 namespace overlay {
@@ -85,6 +90,8 @@ class BroadcastSimple : public td::ListNode {
 td::Status BroadcastSimple::run(OverlayImpl *overlay) {
   auto r = overlay->check_source_eligible(source_, cert_.get(), static_cast<td::uint32>(data_.size()), false);
   if (r == BroadcastCheckResult::Forbidden) {
+    REACHABLE("Overlay simple broadcast forbidden",
+      {{}});
     return td::Status::Error(ErrorCode::error, "broadcast is forbidden");
   }
   is_valid_ = r == BroadcastCheckResult::Allowed;
@@ -104,6 +111,8 @@ td::Status BroadcastSimple::run(OverlayImpl *overlay) {
 
 void BroadcastSimple::checked(OverlayImpl *overlay, td::Result<td::Unit> R) {
   if (R.is_error()) {
+    REACHABLE("Overlay simple broadcast check failed",
+      {{}});
     overlay->update_peer_err_ctr(src_peer_id_, false);
     return;
   }
@@ -119,6 +128,8 @@ void BroadcastSimple::run_continue(OverlayImpl *overlay) {
     td::actor::send_closure(manager, &OverlayManager::send_message, n, overlay->local_id(), overlay->overlay_id(),
                             B.clone());
   }
+  REACHABLE("Overlay simple broadcast delivered",
+    {{}});
   overlay->deliver_broadcast(source_.compute_short_id(), data_.clone());
 }
 

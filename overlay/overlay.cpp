@@ -32,6 +32,11 @@
 
 #include "overlay.hpp"
 
+#pragma push_macro("UNREACHABLE")
+#undef UNREACHABLE
+#include "antithesis_sdk.h"
+#pragma pop_macro("UNREACHABLE")
+
 namespace ton {
 
 namespace overlay {
@@ -218,6 +223,8 @@ td::Status OverlayImpl::process_broadcast(adnl::AdnlNodeIdShort message_from,
 
 td::Status OverlayImpl::process_broadcast(adnl::AdnlNodeIdShort message_from,
                                           tl_object_ptr<ton_api::overlay_broadcastNotFound> bcast) {
+  REACHABLE("Overlay received broadcastNotFound protocol violation",
+    {{"from", message_from.bits256_value().to_hex().substr(0, 16)}});
   return td::Status::Error(ErrorCode::protoviolation,
                            PSTRING() << "received strange message broadcastNotFound from " << message_from);
 }
@@ -259,6 +266,8 @@ void OverlayImpl::receive_message(adnl::AdnlNodeIdShort src, tl_object_ptr<ton_a
                                   td::BufferSlice data) {
   if (!is_valid_peer(src, extra ? extra->certificate_.get() : nullptr)) {
     VLOG(OVERLAY_WARNING) << this << ": received message in private overlay from unknown source " << src;
+    REACHABLE("Overlay rejected message from invalid peer",
+      {{"src", src.bits256_value().to_hex().substr(0, 16)}});
     return;
   }
 
@@ -274,6 +283,8 @@ void OverlayImpl::receive_message(adnl::AdnlNodeIdShort src, tl_object_ptr<ton_a
     LOG_IF(WARNING, status.is_error() && status.code() != ErrorCode::notready)
         << "Failed to process broadcast: " << status;
   });
+  REACHABLE("Overlay broadcast message dispatched",
+    {{"src", src.bits256_value().to_hex().substr(0, 16)}});
 }
 
 void OverlayImpl::alarm() {
