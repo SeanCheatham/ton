@@ -23,6 +23,8 @@
 #include "candidate-serializer.h"
 #include "validator-session.hpp"
 
+#include "antithesis_sdk.h"
+
 namespace ton {
 
 namespace validatorsession {
@@ -983,6 +985,8 @@ double ValidatorSessionImpl::get_current_max_block_delay() const {
 }
 
 void ValidatorSessionImpl::on_new_round(td::uint32 round) {
+  REACHABLE("Validator session advanced to new round",
+    {{"round", round}});
   if (round != 0) {
     CHECK(cur_round_ < round);
     pending_generate_ = false;
@@ -1036,6 +1040,8 @@ void ValidatorSessionImpl::on_new_round(td::uint32 round) {
     auto it = blocks_.find(SentBlock::get_block_id(block));
     bool have_block = (bool)block;
     if (!have_block) {
+      REACHABLE("Validator session round skipped without block",
+        {{"round", cur_round_}});
       callback_->on_block_skipped(cur_round_);
     } else {
       cur_stats_.success = true;
@@ -1058,6 +1064,8 @@ void ValidatorSessionImpl::on_new_round(td::uint32 round) {
           description().get_source_public_key(block->get_src_idx()),
           BlockCandidatePriority{cur_round_, first_block_round_,
                                  description().get_node_priority(block->get_src_idx(), cur_round_)}};
+      REACHABLE("Validator session block committed",
+        {{"round", cur_round_}, {"signatures", static_cast<int>(export_sigs.size())}});
       if (it == blocks_.end()) {
         callback_->on_block_committed(std::move(source_info), block->get_root_hash(), block->get_file_hash(),
                                       td::BufferSlice(), std::move(export_sigs), std::move(export_approve_sigs),

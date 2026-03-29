@@ -24,6 +24,8 @@
 
 #include "validator-session-state.h"
 
+#include "antithesis_sdk.h"
+
 namespace td {
 
 td::StringBuilder& operator<<(td::StringBuilder& sb, const ton::ton_api::validatorSession_round_Message& message) {
@@ -668,6 +670,8 @@ bool ValidatorSessionRoundState::check_need_generate_vote_for(ValidatorSessionDe
 tl_object_ptr<ton_api::validatorSession_message_voteFor> ValidatorSessionRoundState::generate_vote_for(
     ValidatorSessionDescription& desc, td::uint32 src_idx, td::uint32 att) const {
   CHECK(src_idx == desc.get_vote_for_author(att));
+  REACHABLE("Validator session vote generated",
+    {{"attempt", static_cast<int>(att)}});
   std::vector<ValidatorSessionCandidateId> v;
   for (td::uint32 i = 0; i < sent_blocks_->size(); i++) {
     auto B = sent_blocks_->at(i);
@@ -685,6 +689,8 @@ const SentBlock* ValidatorSessionRoundState::choose_block_to_vote(ValidatorSessi
                                                                   td::uint32 att, const SentBlock* vote_for,
                                                                   bool vote_for_inited, bool& found) const {
   found = false;
+  REACHABLE("Validator session choosing block to vote on",
+    {{}});
   if (!sent_blocks_) {
     return nullptr;
   }
@@ -842,6 +848,8 @@ std::vector<const SentBlock*> ValidatorSessionRoundState::choose_blocks_to_appro
     }
     td::int32 prio = desc.get_node_priority(B->get_src_idx(), seqno_);
     CHECK(prio >= 0);
+    REACHABLE("Validator session block candidate evaluated for approval",
+      {{}});
     td::uint32 blk_src_idx = B->get_src_idx();
     if (was_source.count(blk_src_idx) > 0) {
       // Any honest validator submits at most one block in a round
