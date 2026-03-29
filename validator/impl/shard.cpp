@@ -28,6 +28,11 @@
 #include "message-queue.hpp"
 #include "shard.hpp"
 
+#pragma push_macro("UNREACHABLE")
+#undef UNREACHABLE
+#include "antithesis_sdk.h"
+#pragma pop_macro("UNREACHABLE")
+
 #define LAZY_STATE_DESERIALIZE 1
 
 namespace ton {
@@ -203,6 +208,9 @@ td::Status ShardStateQ::apply_block(BlockIdExt newid, td::Ref<BlockData> block, 
   }
   Ref<vm::Cell> update = cs.prefetch_ref(2);  // Merkle update
   TRY_RESULT(next_state_root, vm::MerkleUpdate::apply(root, update, hint));
+  ALWAYS_OR_UNREACHABLE(next_state_root.not_null(),
+    "Shard state Merkle update produces non-null root",
+    {{"block_id", newid.to_str()}});
   if (hint != nullptr && fake_merge_) {
     hint->prev_state_cells.erase(root->get_hash());
   }
@@ -223,10 +231,14 @@ td::Status ShardStateQ::apply_block(BlockIdExt newid, td::Ref<BlockData> block, 
   block::ShardId id{info.shard_id};
   ton::BlockId hdr_id{ton::ShardIdFull(id), info.seq_no};
   if (!id.is_valid() || get_shard() != ton::ShardIdFull(id) || get_seqno() != info.seq_no) {
+    REACHABLE("Shard state header mismatch after apply_block",
+      {{"block_id", newid.to_str()}, {"expected_shard", get_shard().to_str()}, {"header_id", hdr_id.to_str()}});
     return td::Status::Error(-668, "header of newly-computed shardchain state for block "s + blkid.id.to_str() +
                                        " contains a BlockId " + hdr_id.to_str() +
                                        " different from the one originally required");
   }
+  REACHABLE("Shard apply_block completed successfully",
+    {{"block_id", newid.to_str()}, {"new_lt", std::to_string(lt)}, {"new_utime", std::to_string(utime)}});
   return td::Status::OK();
 }
 
@@ -253,6 +265,8 @@ td::Result<td::Ref<ShardState>> ShardStateQ::merge_with(const ShardState& with) 
   if (!block::gen::t_ShardState.cell_pack_split_state(root, std::move(root1), std::move(root2))) {
     return td::Status::Error(-667, "cannot construct a virtual split_state after a merge");
   }
+  REACHABLE("Shard merge_with completed",
+    {{"shard1", blkid.shard_full().to_str()}, {"shard2", other.blkid.shard_full().to_str()}});
   auto m = Ref<ShardStateQ>{
       true,
       ton::BlockIdExt{blkid.id.workchain, ton::shard_parent(blkid.id.shard),
@@ -285,6 +299,8 @@ td::Result<std::pair<td::Ref<ShardState>, td::Ref<ShardState>>> ShardStateQ::spl
   ls.fake_split_ = rs.fake_split_ = true;
   ls.blkid.id.shard = ton::shard_child(blkid.id.shard, true);
   rs.blkid.id.shard = ton::shard_child(blkid.id.shard, false);
+  REACHABLE("Shard split completed",
+    {{"parent_shard", blkid.shard_full().to_str()}});
   return std::make_pair<Ref<ShardState>, Ref<ShardState>>(std::move(l), std::move(r));
 }
 
@@ -401,8 +417,12 @@ td::Status MasterchainStateQ::mc_reinit() {
 td::Status MasterchainStateQ::apply_block(BlockIdExt id, td::Ref<BlockData> block, vm::StoreCellHint* hint) {
   auto err = ShardStateQ::apply_block(id, block, hint);
   if (err.is_error()) {
+    REACHABLE("Masterchain apply_block failed",
+      {{"block_id", id.to_str()}, {"error", err.to_string()}});
     return err;
   }
+  REACHABLE("Masterchain apply_block succeeded",
+    {{"block_id", id.to_str()}});
   config_.reset();
   err = mc_reinit();
   if (err.is_error()) {
