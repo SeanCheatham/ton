@@ -57,7 +57,7 @@ target_link_libraries(tddb PUBLIC tdutils tdactor tddb_utils)
 if (TDDB_USE_ROCKSDB)
   target_sources(tddb PRIVATE ${TDDB_ROCKSDB_SOURCE})
   target_compile_definitions(tddb PUBLIC -DTDDB_USE_ROCKSDB)
-  target_link_libraries(tddb PUBLIC rocksdb)
+  target_link_libraries(tddb PUBLIC rocksdb antithesis-sdk-cpp)
 endif()
 
 add_executable(io-bench test/io-bench.cpp)

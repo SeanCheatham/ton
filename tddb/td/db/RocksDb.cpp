@@ -25,6 +25,7 @@
 #include "rocksdb/write_batch.h"
 #include "td/db/RocksDb.h"
 #include "td/utils/misc.h"
+#include "antithesis_sdk.h"
 
 namespace td {
 namespace {
@@ -65,6 +66,7 @@ RocksDb RocksDb::clone() const {
 
 Result<RocksDb> RocksDb::open(std::string path, RocksDbOptions options) {
   rocksdb::Options db_options;
+  REACHABLE("RocksDb database open attempted", {{}});
   db_options.merge_operator = options.merge_operator;
   db_options.compaction_filter = options.compaction_filter;
 
@@ -333,6 +335,7 @@ Status RocksDb::for_each_in_range(Slice begin, Slice end, std::function<Status(S
     TRY_STATUS(f(key, value));
   }
   if (!iterator->status().ok()) {
+    REACHABLE("RocksDb iterator status error during range scan", {{}});
     return from_rocksdb(iterator->status());
   }
   return td::Status::OK();
@@ -341,6 +344,7 @@ Status RocksDb::for_each_in_range(Slice begin, Slice end, std::function<Status(S
 Status RocksDb::begin_write_batch() {
   CHECK(!transaction_);
   write_batch_ = std::make_unique<rocksdb::WriteBatch>();
+  REACHABLE("RocksDb write batch started", {{}});
   return Status::OK();
 }
 
@@ -350,6 +354,7 @@ Status RocksDb::begin_transaction() {
   rocksdb::WriteOptions options;
   options.sync = true;
   transaction_.reset(transaction_db_->BeginTransaction(options, {}));
+  REACHABLE("RocksDb transaction started", {{}});
   return Status::OK();
 }
 
@@ -380,11 +385,14 @@ Status RocksDb::abort_transaction() {
 }
 
 Status RocksDb::flush() {
+  REACHABLE("RocksDb flush requested", {{}});
   return from_rocksdb(db_->Flush({}));
 }
 
 Status RocksDb::begin_snapshot() {
   snapshot_.reset(db_->GetSnapshot());
+  ALWAYS_OR_UNREACHABLE(snapshot_ != nullptr,
+    "RocksDb snapshot creation returns non-null handle", {{}});
   if (options_.snapshot_statistics) {
     options_.snapshot_statistics->begin_snapshot(snapshot_.get());
   }
