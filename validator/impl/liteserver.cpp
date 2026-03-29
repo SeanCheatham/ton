@@ -3202,6 +3202,8 @@ void LiteQuery::perform_getValidatorStats(BlockIdExt blkid, int mode, int count,
                                           UnixTime min_utime) {
   LOG(INFO) << "started a getValidatorStats(" << blkid.to_str() << ", " << mode << ", " << count << ", "
             << start_after.to_hex() << ", " << min_utime << ") liteserver query";
+  REACHABLE("Liteserver getValidatorStats dispatched",
+    {{"block_id", blkid.to_str()}, {"mode", std::to_string(mode)}, {"count", std::to_string(count)}});
   if (count <= 0) {
     fatal_error("requested entry count limit must be positive");
     return;
@@ -3260,6 +3262,8 @@ void LiteQuery::continue_getValidatorStats(int mode, int limit, Bits256 start_af
     return;
   }
   LOG(INFO) << "getValidatorStats() query completed";
+  REACHABLE("Liteserver getValidatorStats completed successfully",
+    {{"block_id", base_blk_id_.to_str()}});
   auto b = ton::create_serialize_tl_object<ton::lite_api::liteServer_validatorStats>(
       mode & 0xff, ton::create_tl_lite_block_id(base_blk_id_), count, complete, res1.move_as_ok(), res2.move_as_ok());
   finish_query(std::move(b));

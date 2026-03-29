@@ -14,6 +14,7 @@ LITE_PORT="${LITE_PORT:-30003}"
 ASSERTION_NAME="Liteserver handles diverse query types"
 GETBLOCK_ASSERTION="Liteserver getblock query returned valid data"
 LASTTRANS_ASSERTION="Liteserver transaction history query returned valid data"
+VALSTATS_ASSERTION="Liteserver validatorstats query returned valid data"
 HEARTBEAT_MAX_AGE=60
 HEARTBEAT_WAIT_MAX=20   # seconds to wait for heartbeat to appear
 HEARTBEAT_WAIT_POLL=2   # seconds between retries
@@ -21,6 +22,7 @@ HEARTBEAT_WAIT_POLL=2   # seconds between retries
 sdk_catalog_sometimes "${ASSERTION_NAME}"
 sdk_catalog_sometimes "${GETBLOCK_ASSERTION}"
 sdk_catalog_sometimes "${LASTTRANS_ASSERTION}"
+sdk_catalog_sometimes "${VALSTATS_ASSERTION}"
 
 # Precondition: heartbeat must be fresh.
 # Retry briefly instead of immediately skipping — the validator's heartbeat
@@ -214,6 +216,25 @@ if [ -n "${BLOCK_ID}" ]; then
     fi
 fi
 
+# --- Validator stats query ---
+VALSTATS_OK=false
+if [ -n "${BLOCK_ID}" ]; then
+    OUTPUT_VS=$(timeout 15 lite-client \
+        -v 1 \
+        -a "${VALIDATOR_IP}:${LITE_PORT}" \
+        -C /shared/liteserver.config.json \
+        -c 'validatorstats' \
+        -c 'quit' 2>&1) || true
+
+    echo "validatorstats response: ${#OUTPUT_VS} chars"
+    echo "${OUTPUT_VS:0:500}"
+
+    if echo "${OUTPUT_VS}" | grep -qi 'validator\|signed\|stat'; then
+        VALSTATS_OK=true
+        echo "validatorstats returned validator participation data"
+    fi
+fi
+
 # --- Emit assertions ---
 DETAILS=$(jq -cn \
     --argjson output_len "${OUTPUT_LEN}" \
@@ -224,8 +245,9 @@ DETAILS=$(jq -cn \
     --argjson getconfig "${GETCONFIG_OK}" \
     --argjson lasttrans "${LASTTRANS_OK}" \
     --argjson allshards "${ALLSHARDS_OK}" \
+    --argjson validatorstats "${VALSTATS_OK}" \
     --arg block_id "${BLOCK_ID}" \
-    '{output_length: $output_len, resolved_ip: $ip, getblock: $getblock, getblockheader: $getheader, getstate: $getstate, getconfig: $getconfig, lasttrans: $lasttrans, allshards: $allshards, block_id: $block_id}')
+    '{output_length: $output_len, resolved_ip: $ip, getblock: $getblock, getblockheader: $getheader, getstate: $getstate, getconfig: $getconfig, lasttrans: $lasttrans, allshards: $allshards, validatorstats: $validatorstats, block_id: $block_id}')
 
 if [ "${OUTPUT_LEN}" -gt 0 ]; then
     echo "PASS: liteserver responded to diverse queries"
@@ -249,6 +271,15 @@ if [ -n "${TRANS_LT}" ] && [ "${TRANS_LT}" != "0" ]; then
         sdk_sometimes true "${LASTTRANS_ASSERTION}" "${DETAILS}"
     else
         sdk_sometimes false "${LASTTRANS_ASSERTION}" "${DETAILS}"
+    fi
+fi
+
+# Emit validatorstats assertion
+if [ -n "${BLOCK_ID}" ]; then
+    if [ "${VALSTATS_OK}" = "true" ]; then
+        sdk_sometimes true "${VALSTATS_ASSERTION}" "${DETAILS}"
+    else
+        sdk_sometimes false "${VALSTATS_ASSERTION}" "${DETAILS}"
     fi
 fi
 
