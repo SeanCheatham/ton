@@ -79,12 +79,13 @@ if [ "$SST_COUNT" -gt 0 ]; then
 elif [ "$UPTIME_EST" -lt "$STARTUP_GRACE" ]; then
     # Too early after startup — SST files may not exist yet, skip
     echo "Validator uptime ~${UPTIME_EST}s < ${STARTUP_GRACE}s grace period, skipping assertion"
-elif [ "$COMPACTION_COUNT" -eq 0 ]; then
+elif [ "$MANIFEST_SIZE" -le 580 ]; then
     # No compaction has occurred yet — SST files legitimately don't exist.
-    # A standalone validator with no peers never produces blocks, so memtables
-    # are never flushed. Emit true: the absence of SST is expected when no
-    # compaction/flush has happened.
-    echo "No compaction events detected (count=0), SST absence is expected — emitting true"
+    # MANIFEST starts at ~580 bytes baseline; growth beyond that indicates
+    # compaction/flush activity. A standalone validator with no peers never
+    # produces blocks, so memtables are never flushed. Emit true: the absence
+    # of SST is expected when no compaction/flush has happened.
+    echo "No compaction events detected (manifest_size=${MANIFEST_SIZE}<=580), SST absence is expected — emitting true"
     sdk_always true "$ASSERTION_NAME" "$DETAILS"
 else
     sdk_always false "$ASSERTION_NAME" "$DETAILS"
