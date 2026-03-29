@@ -505,7 +505,7 @@ echo "0" > ${METRIC_PREFIX}_db_dir_count
 echo "unknown" > ${METRIC_PREFIX}_rocksdb_identity
 echo "unavailable" > ${METRIC_PREFIX}_config_hash
 echo "0" > ${METRIC_PREFIX}_manifest_size
-echo "0" > ${METRIC_PREFIX}_compaction_count
+echo "0" > ${METRIC_PREFIX}_manifest_total_size
 echo "0:0" > ${METRIC_PREFIX}_thread_history
 echo "0:0" > ${METRIC_PREFIX}_mmap_history
 echo "0:0" > ${METRIC_PREFIX}_sock_history
@@ -967,14 +967,15 @@ while true; do
         ROCKSDB_LOG_SIZE=$(stat -c%s "$ROCKSDB_LOG_FILE" 2>/dev/null || echo "0")
     fi
     echo "$ROCKSDB_LOG_SIZE" > ${METRIC_PREFIX}_rocksdb_log_size
-    # Write RocksDB compaction event count for compaction health monitoring
-    COMPACTION_COUNT=0
-    for logf in $ROCKSDB_LOG; do
-        COUNT=$(grep -ciE "compacted to:|Compaction.*@|Manual compaction|compaction_job|CompactFiles|CompactionJob|compaction_finished|compaction_started|Compacted.*=>" "$logf" 2>/dev/null) || true
-        COUNT=${COUNT:-0}
-        COMPACTION_COUNT=$((COMPACTION_COUNT + COUNT))
+    # Detect compaction via MANIFEST file size growth (reliable regardless of log config)
+    # Every compaction writes a new version edit to the MANIFEST file, making it grow.
+    # This is a guaranteed side-effect of compaction regardless of RocksDB log settings.
+    MANIFEST_SIZE=0
+    for mf in $(find /var/ton-work/db -maxdepth 4 -name "MANIFEST-*" -type f 2>/dev/null | head -5); do
+        SZ=$(stat -c%s "$mf" 2>/dev/null || echo "0")
+        MANIFEST_SIZE=$((MANIFEST_SIZE + SZ))
     done
-    echo "$COMPACTION_COUNT" > ${METRIC_PREFIX}_compaction_count
+    echo "$MANIFEST_SIZE" > ${METRIC_PREFIX}_manifest_total_size
     # Write RocksDB SST file count for data integrity monitoring
     # Search deeper (maxdepth 5) and include both .sst and .ldb extensions
     # TON uses multiple RocksDB instances in subdirs (celldb/, blockdb/, statedb/)

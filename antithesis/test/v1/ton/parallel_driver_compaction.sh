@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 
 # Parallel driver: RocksDB compaction has occurred when validator is mature
-# A "sometimes" assertion: we don't expect compaction every moment, but over a test's
-# lifetime at least one compaction event should occur.
+# Detects compaction by monitoring MANIFEST file size growth over time.
+# Every compaction writes a version edit to the MANIFEST file, so size growth
+# is a guaranteed side-effect regardless of RocksDB log configuration.
 
 source "$(dirname "$0")/helper_sdk.sh"
 
@@ -27,26 +28,50 @@ else
     echo "Heartbeat file not present yet, skipping"; exit 0
 fi
 
-if [ ! -f /shared/validator_compaction_count ]; then
-    echo "Compaction count file not present yet, skipping"
+# Read current MANIFEST total size from the validator's metric
+if [ ! -f /shared/validator_manifest_total_size ]; then
+    echo "MANIFEST size file not present yet, skipping"
     exit 0
 fi
 
-COMPACTION_COUNT=$(cat /shared/validator_compaction_count 2>/dev/null || true)
-COMPACTION_COUNT=$(echo "$COMPACTION_COUNT" | tr -d '[:space:]')
+CURRENT_SIZE=$(cat /shared/validator_manifest_total_size 2>/dev/null || true)
+CURRENT_SIZE=$(echo "$CURRENT_SIZE" | tr -d '[:space:]')
 
-if ! [[ "$COMPACTION_COUNT" =~ ^[0-9]+$ ]]; then
-    echo "Invalid compaction count value: ${COMPACTION_COUNT}, skipping"
+if ! [[ "$CURRENT_SIZE" =~ ^[0-9]+$ ]]; then
+    echo "Invalid MANIFEST size value: ${CURRENT_SIZE}, skipping"
     exit 0
 fi
 
-DETAILS=$(jq -cn --argjson count "$COMPACTION_COUNT" '{compaction_events: $count}')
+BASELINE_FILE="/shared/_prev_manifest_size"
 
-if [ "$COMPACTION_COUNT" -gt 0 ]; then
-    echo "PASS: RocksDB compaction observed (${COMPACTION_COUNT} events)"
+# On first invocation, store baseline and exit
+if [ ! -f "$BASELINE_FILE" ]; then
+    echo "$CURRENT_SIZE" > "$BASELINE_FILE"
+    echo "Stored baseline MANIFEST size: ${CURRENT_SIZE} bytes"
+    sdk_sometimes false "$ASSERTION_NAME" "$(jq -cn --argjson current "$CURRENT_SIZE" '{manifest_bytes: $current, baseline_bytes: $current, growth_bytes: 0}')"
+    exit 0
+fi
+
+BASELINE=$(cat "$BASELINE_FILE" 2>/dev/null || true)
+BASELINE=$(echo "$BASELINE" | tr -d '[:space:]')
+
+if ! [[ "$BASELINE" =~ ^[0-9]+$ ]]; then
+    # Reset baseline if corrupted
+    echo "$CURRENT_SIZE" > "$BASELINE_FILE"
+    echo "Baseline was invalid, reset to ${CURRENT_SIZE}"
+    exit 0
+fi
+
+GROWTH=$((CURRENT_SIZE - BASELINE))
+DETAILS=$(jq -cn --argjson current "$CURRENT_SIZE" --argjson baseline "$BASELINE" --argjson growth "$GROWTH" \
+    '{manifest_bytes: $current, baseline_bytes: $baseline, growth_bytes: $growth}')
+
+# Compaction detected if MANIFEST has grown by at least 1KB
+if [ "$GROWTH" -ge 1024 ]; then
+    echo "PASS: RocksDB compaction detected (MANIFEST grew by ${GROWTH} bytes)"
     sdk_sometimes true "$ASSERTION_NAME" "$DETAILS"
 else
-    echo "No compaction events observed yet (count=0)"
+    echo "No compaction detected yet (MANIFEST growth: ${GROWTH} bytes)"
     sdk_sometimes false "$ASSERTION_NAME" "$DETAILS"
 fi
 

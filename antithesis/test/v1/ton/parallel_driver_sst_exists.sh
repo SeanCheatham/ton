@@ -63,15 +63,16 @@ UPTIME_EST=$(($(date +%s) - HB_CTIME))
 # Compaction precondition: SST files are created by memtable flushes/compaction.
 # A standalone validator with no peers may never produce blocks, so no data gets
 # flushed to SST. Only assert SST existence if compaction has actually occurred.
-COMPACTION_COUNT=0
-if [ -f /shared/validator_compaction_count ]; then
-    COMPACTION_COUNT=$(cat /shared/validator_compaction_count 2>/dev/null || echo "0")
-    if ! [[ "$COMPACTION_COUNT" =~ ^[0-9]+$ ]]; then
-        COMPACTION_COUNT=0
+# We detect compaction via MANIFEST file size growth (more reliable than LOG grep).
+MANIFEST_SIZE=0
+if [ -f /shared/validator_manifest_total_size ]; then
+    MANIFEST_SIZE=$(cat /shared/validator_manifest_total_size 2>/dev/null || echo "0")
+    if ! [[ "$MANIFEST_SIZE" =~ ^[0-9]+$ ]]; then
+        MANIFEST_SIZE=0
     fi
 fi
 
-DETAILS=$(jq -cn --argjson count "$SST_COUNT" --argjson uptime "$UPTIME_EST" --argjson compactions "$COMPACTION_COUNT" '{sst_count: $count, estimated_uptime_seconds: $uptime, compaction_count: $compactions}')
+DETAILS=$(jq -cn --argjson count "$SST_COUNT" --argjson uptime "$UPTIME_EST" --argjson manifest_size "$MANIFEST_SIZE" '{sst_count: $count, estimated_uptime_seconds: $uptime, manifest_size_bytes: $manifest_size}')
 
 if [ "$SST_COUNT" -gt 0 ]; then
     sdk_always true "$ASSERTION_NAME" "$DETAILS"
