@@ -26,6 +26,14 @@
 
 #include "download-state.hpp"
 
+// Save TON's UNREACHABLE() before including the Antithesis SDK, which
+// defines its own UNREACHABLE(message, ...) macro.
+#pragma push_macro("UNREACHABLE")
+#undef UNREACHABLE
+#include "antithesis_sdk.h"
+// Restore TON's UNREACHABLE() so the rest of the codebase is unaffected.
+#pragma pop_macro("UNREACHABLE")
+
 namespace ton {
 
 namespace validator {
@@ -152,6 +160,8 @@ DownloadShardState::DownloadShardState(BlockIdExt block_id, BlockIdExt mastercha
 DownloadShardState::~DownloadShardState() = default;
 
 void DownloadShardState::start_up() {
+  REACHABLE("State download started",
+    {{"block", block_id_.to_str()}});
   status_ = ProcessStatus(manager_, "process.download_state");
   alarm_timestamp() = timeout_;
 
@@ -166,6 +176,8 @@ void DownloadShardState::got_block_handle(BlockHandle handle) {
   handle_ = std::move(handle);
 
   if (handle_->received_state()) {
+    REACHABLE("State download skipped: already in DB",
+      {{"block", block_id_.to_str()}});
     LOG(WARNING) << "shard state " << block_id_.to_str() << " already stored in db";
     td::actor::send_closure(manager_, &ValidatorManagerInterface::get_shard_state_from_db, handle_,
                             [SelfId = actor_id(this)](td::Result<td::Ref<ShardState>> R) {
@@ -286,6 +298,8 @@ void DownloadShardState::download_zero_state() {
 
 void DownloadShardState::downloaded_zero_state(td::BufferSlice data) {
   if (sha256_bits256(data.as_slice()) != block_id_.file_hash) {
+    REACHABLE("Zero state file hash mismatch detected",
+      {{"block", block_id_.to_str()}});
     fail_handler(actor_id(this), td::Status::Error(ErrorCode::protoviolation, "bad zero state: file hash mismatch"));
     return;
   }
@@ -296,6 +310,9 @@ void DownloadShardState::downloaded_zero_state(td::BufferSlice data) {
   state_ = S.move_as_ok();
 
   CHECK(state_->root_hash() == block_id_.root_hash);
+  ALWAYS_OR_UNREACHABLE(state_->root_hash() == block_id_.root_hash,
+    "Downloaded zero state root hash matches block ID",
+    {{"block", block_id_.to_str()}});
   checked_shard_state();
 }
 
@@ -308,6 +325,8 @@ void DownloadShardState::downloaded_shard_state(td::BufferSlice data) {
   }
   auto state = S.move_as_ok();
   if (state->root_hash() != handle_->state()) {
+    REACHABLE("Shard state root hash mismatch detected",
+      {{"block", block_id_.to_str()}});
     fail_handler(actor_id(this),
                  td::Status::Error(ErrorCode::protoviolation, "bad persistent state: root hash mismatch"));
     return;
@@ -323,6 +342,8 @@ void DownloadShardState::downloaded_shard_state(td::BufferSlice data) {
 }
 
 void DownloadShardState::checked_shard_state() {
+  REACHABLE("Shard state validated and ready for storage",
+    {{"block", block_id_.to_str()}});
   status_.set_status(PSTRING() << block_id_.id.to_str() << " : storing state file");
   LOG(WARNING) << "checked shard state " << block_id_.to_str();
   auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<td::Unit> R) {
