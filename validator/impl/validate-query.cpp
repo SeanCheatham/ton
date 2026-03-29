@@ -179,6 +179,7 @@ bool ValidateQuery::reject_query(std::string err_msg, td::Status error, td::Buff
 bool ValidateQuery::soft_reject_query(std::string error, td::BufferSlice reason) {
   error = error_ctx() + error;
   LOG(ERROR) << "SOFT REJECT: aborting validation of block candidate for " << shard_.to_str() << " : " << error;
+  REACHABLE("Block validation soft rejected", {{"block_id", id_.to_str()}, {"shard", shard_.to_str()}, {"error", error}});
   if (main_promise) {
     record_stats(false, error);
     errorlog::ErrorLog::log(PSTRING() << "SOFT REJECT: aborting validation of block candidate for " << shard_.to_str()
@@ -7365,6 +7366,9 @@ bool ValidateQuery::postcheck_value_flow() {
     return reject_query(PSTRING() << "invalid burned in value flow: " << id_.to_str() << " declared "
                                   << value_flow_.burned.to_str() << ", correct value is " << total_burned_.to_str());
   }
+  ALWAYS_OR_UNREACHABLE(value_flow_.fees_collected == expected_fees && total_burned_ == value_flow_.burned,
+    "Block ValueFlow is balanced: total in equals total out",
+    {{"block_id", id_.to_str()}, {"shard", shard_.to_str()}});
   return true;
 }
 
@@ -7434,6 +7438,7 @@ bool ValidateQuery::try_validate() {
         return reject_query("cannot request out msg queue size");
       }
       stage_ = 1;
+      REACHABLE("Block validation stage 0 completed", {{"block_id", id_.to_str()}, {"shard", shard_.to_str()}});
       if (pending) {
         return true;
       }
@@ -7487,6 +7492,7 @@ bool ValidateQuery::try_validate() {
         return reject_query("invalid collection of account transactions in ShardAccountBlocks");
       }
       stage_ = 2;
+      REACHABLE("Block validation stage 1 completed", {{"block_id", id_.to_str()}, {"shard", shard_.to_str()}});
       if (parallel_accounts_validation_) {
         return true;
       }
@@ -7514,6 +7520,7 @@ bool ValidateQuery::try_validate() {
       if (!postcheck_value_flow()) {
         return reject_query("new ValueFlow is invalid");
       }
+      REACHABLE("Block validation stage 2 completed", {{"block_id", id_.to_str()}, {"shard", shard_.to_str()}});
     }
   } catch (vm::VmError& err) {
     return fatal_error(-666, err.get_msg());
