@@ -23,6 +23,7 @@ sdk_catalog_always "${BALANCE_ALWAYS_NAME}"
 sdk_catalog_sometimes "${BALANCE_SOMETIMES_NAME}"
 sdk_catalog_always "${REPLAY_ALWAYS_NAME}"
 sdk_catalog_sometimes "${REPLAY_SOMETIMES_NAME}"
+sdk_catalog_always "Transfer fee is deducted after confirmed transaction"
 
 # Precondition: heartbeat must be fresh
 if [ ! -f /shared/validator_heartbeat ]; then
@@ -184,6 +185,24 @@ if [ "${NEW_SEQNO}" -gt "${SEQNO}" ]; then
     if [ -n "${POST_BALANCE}" ] && [[ "${POST_BALANCE}" =~ ^[0-9]+$ ]]; then
         echo "${POST_BALANCE}" > "${BALANCE_FILE}"
         echo "Recorded post-transfer balance: ${POST_BALANCE}"
+    fi
+
+    # Within-invocation fee deduction check: balance must decrease after a confirmed tx (gas fees apply even for self-transfers)
+    if [ -n "${CURRENT_BALANCE}" ] && [[ "${CURRENT_BALANCE}" =~ ^[0-9]+$ ]] && \
+       [ -n "${POST_BALANCE}" ] && [[ "${POST_BALANCE}" =~ ^[0-9]+$ ]]; then
+        FEE_DETAILS=$(jq -cn \
+            --arg pre "${CURRENT_BALANCE}" \
+            --arg post "${POST_BALANCE}" \
+            '{pre_transfer_balance: $pre, post_transfer_balance: $post}')
+        if [ "${POST_BALANCE}" -lt "${CURRENT_BALANCE}" ]; then
+            echo "PASS: fee deducted after confirmed tx (${CURRENT_BALANCE} -> ${POST_BALANCE})"
+            sdk_always true "Transfer fee is deducted after confirmed transaction" "${FEE_DETAILS}"
+        else
+            echo "FAIL: balance did not decrease despite confirmed seqno advance (${CURRENT_BALANCE} -> ${POST_BALANCE})"
+            sdk_always false "Transfer fee is deducted after confirmed transaction" "${FEE_DETAILS}"
+        fi
+    else
+        echo "Skipping fee deduction check: pre or post balance not available"
     fi
 
     # Replay protection test: re-send the SAME BOC (seqno=N, but contract now expects N+1)
