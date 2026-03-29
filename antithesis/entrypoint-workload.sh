@@ -197,6 +197,8 @@ sdk_catalog_always "Validator survives malformed BOC submissions"
 sdk_catalog_sometimes "Malformed BOC gracefully rejected"
 sdk_catalog_always "Wallet seqno advances by at most 1 per block under contention"
 sdk_catalog_sometimes "Concurrent transfer contention observed"
+sdk_catalog_always "Validator set config is internally consistent"
+sdk_catalog_sometimes "Config params queried successfully during faults"
 echo "Assertion catalog emitted."
 
 # Signal that setup is complete
