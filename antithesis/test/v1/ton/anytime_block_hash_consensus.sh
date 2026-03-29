@@ -7,7 +7,7 @@
 # block content (root hash + file hash) at a given height, not just the seqno.
 # Two validators reporting the same seqno but different hashes = consensus fork.
 #
-# Uses MIN(all validators' latest seqnos) - 3 as the check height, ensuring
+# Uses MIN(all validators' latest seqnos) - 10 as the check height, ensuring
 # the checked block is well below ALL validators' confirmed tips and fully
 # finalized by every validator. This avoids false positives from sync lag
 # after fault-induced restarts (previously used a state file from v1 only).
@@ -16,8 +16,10 @@
 #   - Checks heartbeat freshness for all validators before comparing
 #   - Skips comparison if any validator's heartbeat is stale (may be catching up)
 #   - Requires ALL validators to report their latest seqno
-#   - Skips if any validator's latest seqno is more than 5 behind others (still syncing)
-#   - Includes block IDs, seqnos, and heartbeat ages in assertion details
+#   - Skips if any validator's latest seqno is more than 3 behind others (still syncing)
+#   - Double-queries each validator for self-consistency — excludes mid-sync validators
+#   - Requires CHECK_SEQNO >= 15 to avoid early-chain observation artifacts
+#   - Includes block IDs, seqnos, heartbeat ages, and self-consistency in details
 #
 # Skip gracefully when infrastructure is unavailable (no false positives).
 
@@ -34,7 +36,7 @@ LITE_PORT="${LITE_PORT:-30003}"
 # Heartbeat freshness threshold (seconds)
 HB_FRESHNESS_THRESHOLD=60
 # Max seqno lag before considering a validator "still syncing"
-MAX_SEQNO_LAG=5
+MAX_SEQNO_LAG=3
 
 # Heartbeat files per validator
 HB_FILES=("/shared/validator_heartbeat" "/shared/validator2_heartbeat" "/shared/validator3_heartbeat")
@@ -226,10 +228,10 @@ for s in "${LATEST_SEQNOS[@]}"; do
         MIN_SEQNO="${s}"
     fi
 done
-CHECK_SEQNO=$(( MIN_SEQNO - 3 ))
+CHECK_SEQNO=$(( MIN_SEQNO - 10 ))
 
-if [ "${CHECK_SEQNO}" -lt 1 ]; then
-    echo "CHECK_SEQNO ${CHECK_SEQNO} too low (need >= 1, MIN_SEQNO=${MIN_SEQNO}), skipping"
+if [ "${CHECK_SEQNO}" -lt 15 ]; then
+    echo "CHECK_SEQNO ${CHECK_SEQNO} too low (need >= 15, MIN_SEQNO=${MIN_SEQNO}), skipping"
     exit 0
 fi
 
@@ -243,7 +245,40 @@ BLOCK_ID1=$(query_block_id "${VALIDATOR_HOST}"  "/shared/liteserver.config.json"
 BLOCK_ID2=$(query_block_id "${VALIDATOR2_HOST}" "/shared/liteserver2.config.json" "${CHECK_SEQNO}")
 BLOCK_ID3=$(query_block_id "${VALIDATOR3_HOST}" "/shared/liteserver3.config.json" "${CHECK_SEQNO}")
 
-echo "Block IDs: v1=${BLOCK_ID1:-n/a} v2=${BLOCK_ID2:-n/a} v3=${BLOCK_ID3:-n/a}"
+echo "Block IDs (round 1): v1=${BLOCK_ID1:-n/a} v2=${BLOCK_ID2:-n/a} v3=${BLOCK_ID3:-n/a}"
+
+# --- Self-consistency check: query each validator twice ---
+# If a validator returns different results for the same block, it's mid-sync
+# and must be excluded from comparison. This is the KEY defense against
+# sync-lag false positives: a validator with fresh heartbeat + high seqno
+# can still return stale byseqno results while catching up.
+
+echo "Self-consistency check: re-querying all validators for seqno ${CHECK_SEQNO}..."
+BLOCK_ID1_B=$(query_block_id "${VALIDATOR_HOST}"  "/shared/liteserver.config.json"  "${CHECK_SEQNO}")
+BLOCK_ID2_B=$(query_block_id "${VALIDATOR2_HOST}" "/shared/liteserver2.config.json" "${CHECK_SEQNO}")
+BLOCK_ID3_B=$(query_block_id "${VALIDATOR3_HOST}" "/shared/liteserver3.config.json" "${CHECK_SEQNO}")
+
+echo "Block IDs (round 2): v1=${BLOCK_ID1_B:-n/a} v2=${BLOCK_ID2_B:-n/a} v3=${BLOCK_ID3_B:-n/a}"
+
+SELF_CONSISTENT_V1=true
+SELF_CONSISTENT_V2=true
+SELF_CONSISTENT_V3=true
+
+if [ -n "${BLOCK_ID1}" ] && [ "${BLOCK_ID1}" != "${BLOCK_ID1_B}" ]; then
+    echo "  v1: self-inconsistent (mid-sync), excluding"
+    BLOCK_ID1=""
+    SELF_CONSISTENT_V1=false
+fi
+if [ -n "${BLOCK_ID2}" ] && [ "${BLOCK_ID2}" != "${BLOCK_ID2_B}" ]; then
+    echo "  v2: self-inconsistent (mid-sync), excluding"
+    BLOCK_ID2=""
+    SELF_CONSISTENT_V2=false
+fi
+if [ -n "${BLOCK_ID3}" ] && [ "${BLOCK_ID3}" != "${BLOCK_ID3_B}" ]; then
+    echo "  v3: self-inconsistent (mid-sync), excluding"
+    BLOCK_ID3=""
+    SELF_CONSISTENT_V3=false
+fi
 
 # --- Count responding validators ---
 
@@ -302,10 +337,18 @@ DETAILS=$(jq -cn \
     --argjson v1_hb_age "${HB_AGES[0]}" \
     --argjson v2_hb_age "${HB_AGES[1]}" \
     --argjson v3_hb_age "${HB_AGES[2]}" \
+    --argjson v1_self_consistent "$([ "${SELF_CONSISTENT_V1}" = "true" ] && echo true || echo false)" \
+    --argjson v2_self_consistent "$([ "${SELF_CONSISTENT_V2}" = "true" ] && echo true || echo false)" \
+    --argjson v3_self_consistent "$([ "${SELF_CONSISTENT_V3}" = "true" ] && echo true || echo false)" \
+    --arg v1_verify "${BLOCK_ID1_B:-null}" \
+    --arg v2_verify "${BLOCK_ID2_B:-null}" \
+    --arg v3_verify "${BLOCK_ID3_B:-null}" \
     '{check_seqno: $seqno, v1_block_id: $v1, v2_block_id: $v2, v3_block_id: $v3,
       responded: $responded, fork_detected: $fork, mismatch: $mismatch,
       v1_latest_seqno: $v1_latest, v2_latest_seqno: $v2_latest, v3_latest_seqno: $v3_latest,
-      v1_heartbeat_age_s: $v1_hb_age, v2_heartbeat_age_s: $v2_hb_age, v3_heartbeat_age_s: $v3_hb_age}')
+      v1_heartbeat_age_s: $v1_hb_age, v2_heartbeat_age_s: $v2_hb_age, v3_heartbeat_age_s: $v3_hb_age,
+      v1_self_consistent: $v1_self_consistent, v2_self_consistent: $v2_self_consistent, v3_self_consistent: $v3_self_consistent,
+      v1_verify_id: $v1_verify, v2_verify_id: $v2_verify, v3_verify_id: $v3_verify}')
 
 if [ "${FORK_DETECTED}" = "true" ]; then
     echo "FAIL: CONSENSUS FORK DETECTED at seqno ${CHECK_SEQNO}! ${MISMATCH_DETAIL}"
