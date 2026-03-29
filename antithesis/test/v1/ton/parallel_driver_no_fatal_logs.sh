@@ -21,7 +21,7 @@ if [ ! -f "$LOG_FILE" ]; then
     exit 0
 fi
 
-FATAL_COUNT=$(grep -ciE "$FATAL_PATTERNS" "$LOG_FILE" 2>/dev/null || echo "0")
+FATAL_COUNT=$(grep -ciE "$FATAL_PATTERNS" "$LOG_FILE" 2>/dev/null) || FATAL_COUNT=0
 
 if [ "$FATAL_COUNT" -gt 0 ]; then
     SAMPLE=$(grep -iE "$FATAL_PATTERNS" "$LOG_FILE" 2>/dev/null | tail -3 | head -c 500 || true)

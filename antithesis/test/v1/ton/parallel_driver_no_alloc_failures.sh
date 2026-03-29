@@ -39,7 +39,7 @@ if [ ! -s "$LOG_FILE" ]; then
     exit 0
 fi
 
-ALLOC_COUNT=$(grep -cE "$ALLOC_PATTERNS" "$LOG_FILE" 2>/dev/null || echo "0")
+ALLOC_COUNT=$(grep -cE "$ALLOC_PATTERNS" "$LOG_FILE" 2>/dev/null) || ALLOC_COUNT=0
 TOTAL_LINES=$(wc -l < "$LOG_FILE" 2>/dev/null || echo "0")
 
 if [ "$ALLOC_COUNT" -gt 0 ]; then

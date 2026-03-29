@@ -49,7 +49,7 @@ fi
 # Includes TON-specific patterns and the entrypoint heartbeat marker
 MATCH_COUNT=0
 for f in "${LOG_FILES[@]}"; do
-    COUNT=$(grep -ciE "started|init|adnl|dht|loading|created\.db|config|block|zero\.state|validator|overlay|rldp|catchain|entrypoint|heartbeat" "$f" 2>/dev/null || echo "0")
+    COUNT=$(grep -ciE "started|init|adnl|dht|loading|created\.db|config|block|zero\.state|validator|overlay|rldp|catchain|entrypoint|heartbeat" "$f" 2>/dev/null) || COUNT=0
     MATCH_COUNT=$((MATCH_COUNT + COUNT))
 done
 

@@ -30,7 +30,7 @@ LEAK_DETAIL=""
 
 # Check 1: Scan log file (excluding first 20 lines of startup config dump) for private key patterns
 # pk.ed25519 is the TL type tag for Ed25519 private keys in TON's serialization format
-LOG_HITS=$(tail -n +"21" "$LOG_FILE" 2>/dev/null | grep -ciE 'pk\.ed25519' 2>/dev/null || echo "0")
+LOG_HITS=$(tail -n +"21" "$LOG_FILE" 2>/dev/null | grep -ciE 'pk\.ed25519' 2>/dev/null) || LOG_HITS=0
 
 if [ "$LOG_HITS" -gt 0 ]; then
     LEAKED=true
@@ -44,7 +44,7 @@ for f in /shared/*; do
     [ -f "$f" ] || continue
     # Skip the log file itself (already checked above) and binary files
     [ "$f" = "$LOG_FILE" ] && continue
-    HITS=$(grep -ciE 'pk\.ed25519' "$f" 2>/dev/null || echo "0")
+    HITS=$(grep -ciE 'pk\.ed25519' "$f" 2>/dev/null) || HITS=0
     SHARED_HITS=$((SHARED_HITS + HITS))
 done
 
