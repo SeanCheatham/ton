@@ -278,6 +278,9 @@ sdk_catalog_always "Wallet seqno advances by at most 1 per block under contentio
 sdk_catalog_sometimes "Concurrent transfer contention observed"
 sdk_catalog_always "Validator set config is internally consistent"
 sdk_catalog_sometimes "Config params queried successfully during faults"
+sdk_catalog_always "Shard configuration is non-empty when masterchain is active"
+sdk_catalog_sometimes "Workchain shard state queried during faults"
+sdk_catalog_always "Workchain shard seqno is non-negative"
 echo "Assertion catalog emitted."
 
 # Signal that setup is complete
