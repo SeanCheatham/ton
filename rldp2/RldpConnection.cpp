@@ -20,6 +20,12 @@
 #include "auto/tl/ton_api.h"
 #include "auto/tl/ton_api.hpp"
 #include "common/errorcode.h"
+
+#pragma push_macro("UNREACHABLE")
+#undef UNREACHABLE
+#include "antithesis_sdk.h"
+#pragma pop_macro("UNREACHABLE")
+
 #include "td/actor//actor.h"
 #include "td/utils/Random.h"
 #include "td/utils/overloaded.h"
@@ -57,6 +63,7 @@ void RldpConnection::drop_limits(TransferId id) {
 }
 
 void RldpConnection::on_inbound_completed(TransferId transfer_id, td::Timestamp now) {
+  REACHABLE("RLDP inbound transfer completed", {});
   inbound_transfers_.erase(transfer_id);
   completed_set_.insert(transfer_id);
   completed_queue_.push(CompletedId{transfer_id, now.in(20)});
@@ -70,9 +77,11 @@ td::Timestamp RldpConnection::loop_limits(td::Timestamp now) {
     auto *limit = static_cast<Limit *>(limits_heap_.pop());
     auto error = td::Status::Error(ErrorCode::timeout, "timeout");
     if (limit->is_inbound) {
+      REACHABLE("RLDP inbound transfer timed out", {});
       on_inbound_completed(limit->transfer_id, now);
       to_receive_.emplace_back(limit->transfer_id, std::move(error));
     } else {
+      REACHABLE("RLDP outbound transfer timed out", {});
       auto it = outbound_transfers_.find(limit->transfer_id);
       if (it != outbound_transfers_.end()) {
         for (auto &part : it->second.parts(RldpSender::Config{})) {
